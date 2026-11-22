@@ -23,6 +23,10 @@ data class LockUiState(
     val feedback: String? = null,
     val hintVisible: Boolean = false,
     val hintUsed: Boolean = false,
+    /** Сколько ступеней подсказки уже открыто (0 — ни одной). */
+    val hintLevel: Int = 0,
+    /** Текст текущей (последней открытой) ступени. */
+    val currentHint: String? = null,
     /** Пауза после ошибки, сек. */
     val cooldownSeconds: Int = 0,
     val showParentPin: Boolean = false,
@@ -76,14 +80,31 @@ class LockViewModel(
         }
     }
 
-    /** Показывает подсказку один раз за задачу (если разрешено в профиле). */
+    /**
+     * Открывает следующую ступень подсказки (если разрешено в профиле).
+     * Можно нажать несколько раз, пока есть непросмотренные ступени.
+     */
     fun useHint() {
         val task = uiState.task ?: return
-        if (!uiState.profile.hintsEnabled || uiState.hintUsed) return
+        val steps = task.hintSteps()
+        if (!uiState.profile.hintsEnabled) return
+        if (uiState.hintLevel >= steps.size) {
+            if (steps.isEmpty() && !uiState.hintUsed) {
+                uiState = uiState.copy(
+                    hintUsed = true,
+                    hintVisible = true,
+                    feedback = "Подумай ещё"
+                )
+            }
+            return
+        }
+        val nextLevel = uiState.hintLevel + 1
         uiState = uiState.copy(
             hintUsed = true,
             hintVisible = true,
-            feedback = if (task.hint == null) "Подумай ещё" else null
+            hintLevel = nextLevel,
+            currentHint = steps[nextLevel - 1],
+            feedback = null
         )
     }
 
@@ -106,6 +127,8 @@ class LockViewModel(
                             task = repository.nextTask(),
                             hintVisible = false,
                             hintUsed = false,
+                            hintLevel = 0,
+                            currentHint = null,
                             feedback = "Верно"
                         )
                     } else {
@@ -116,7 +139,15 @@ class LockViewModel(
                             LockController.scheduleNextLaunch(application)
                             uiState = uiState.copy(unlocked = true, tasksSolved = solved, feedback = "Все задания решены. Телефон разблокирован.")
                         } else {
-                            uiState = uiState.copy(tasksSolved = solved, task = repository.nextTask(), hintVisible = false, hintUsed = false, feedback = "Верно. Осталось заданий: ${uiState.tasksRequired - solved}")
+                            uiState = uiState.copy(
+                                tasksSolved = solved,
+                                task = repository.nextTask(),
+                                hintVisible = false,
+                                hintUsed = false,
+                                hintLevel = 0,
+                                currentHint = null,
+                                feedback = "Верно. Осталось заданий: ${uiState.tasksRequired - solved}"
+                            )
                         }
                     }
                 } else {
@@ -135,6 +166,9 @@ class LockViewModel(
                     uiState = uiState.copy(
                         task = refreshed,
                         hintVisible = false,
+                        hintUsed = false,
+                        hintLevel = 0,
+                        currentHint = null,
                         cooldownSeconds = 0
                     )
                 }

@@ -15,12 +15,8 @@ class MathTemplateGenerator {
      */
     fun generate(entry: TemplateEntry, profile: DifficultyProfile, random: Random): Task {
         val level = profile.level()
-        val bound = when {
-            level <= 2 -> 6
-            level <= 4 -> 12
-            level <= 6 -> 20
-            else -> 40
-        }
+        val age = profile.ageYears
+        val bound = AgeCurriculum.maxOperand(age, entry.skillTag).coerceAtLeast(2)
 
         var a = random.nextInt(1, bound + 1)
         var b = random.nextInt(1, bound + 1)
@@ -30,13 +26,30 @@ class MathTemplateGenerator {
             SkillTag.MATH_SUB, SkillTag.MATH_MIX -> {
                 if (b >= a) {
                     val t = a
-                    a = b + random.nextInt(1, 5)
-                    b = t
+                    a = (b + random.nextInt(1, 5)).coerceAtMost(bound + 5)
+                    b = t.coerceAtMost(a - 1).coerceAtLeast(1)
                 }
             }
             SkillTag.MATH_MUL -> {
-                a = random.nextInt(2, if (level <= 5) 9 else 12)
-                b = random.nextInt(2, if (level <= 5) 9 else 12)
+                val maxFactor = AgeCurriculum.maxOperand(age, SkillTag.MATH_MUL).coerceAtLeast(2)
+                val maxProduct = AgeCurriculum.maxProduct(age).coerceAtLeast(4)
+                a = random.nextInt(2, maxFactor + 1)
+                val maxB = (maxProduct / a).coerceAtLeast(2).coerceAtMost(maxFactor)
+                b = random.nextInt(2, maxB + 1)
+            }
+            SkillTag.MATH_DIV -> {
+                val maxFactor = AgeCurriculum.maxOperand(age, SkillTag.MATH_DIV).coerceAtLeast(2)
+                val maxProduct = AgeCurriculum.maxProduct(age).coerceAtLeast(4)
+                b = random.nextInt(2, maxFactor + 1)
+                val maxQ = (maxProduct / b).coerceAtLeast(2).coerceAtMost(maxFactor)
+                val quotient = random.nextInt(2, maxQ + 1)
+                a = b * quotient
+            }
+            SkillTag.MATH_COMPARE -> {
+                if (a == b) {
+                    b = (b + random.nextInt(1, 5)).coerceAtMost(bound + 5)
+                    if (a == b) b = a + 1
+                }
             }
             else -> Unit
         }
@@ -117,6 +130,7 @@ class MathTemplateGenerator {
             SkillTag.MATH_ADD -> numberTask(entry, prompt, a + b, level)
             SkillTag.MATH_SUB -> numberTask(entry, prompt, a - b, level)
             SkillTag.MATH_MUL -> numberTask(entry, prompt, a * b, level)
+            SkillTag.MATH_DIV -> numberTask(entry, prompt, a / b, level)
             SkillTag.MATH_COMPARE -> compareTask(entry, prompt, lower, a, b, nameA, nameB, level)
             SkillTag.MATH_MIX -> mixTask(entry, prompt, lower, a, b, c, price, money, level)
             else -> numberTask(entry, prompt, a + b, level)
@@ -152,6 +166,7 @@ class MathTemplateGenerator {
                 choices = options.mapIndexed { i, l -> TaskChoice(i.toString(), l) },
                 acceptedAnswers = listOf(winner),
                 hint = entry.hint,
+                hints = Task.buildHints("Сравни два количества", entry.hint),
                 difficultyLevel = level,
                 skillTag = SkillTag.MATH_COMPARE
             )
@@ -159,17 +174,19 @@ class MathTemplateGenerator {
         if ("что больше" in lower || "какое число больше" in lower ||
             "какое число меньше" in lower || "или" in lower || "какое больше" in lower
         ) {
+            val left = a
+            val right = if (b == a) a + 1 else b
             val pickSmaller = "меньше" in lower
-            val answer = (if (pickSmaller) minOf(a, b) else maxOf(a, b)).toString()
-            val options = listOf(a, b).distinct().map { it.toString() }
+            val answer = (if (pickSmaller) minOf(left, right) else maxOf(left, right)).toString()
             return Task(
-                id = "math-cmp-num-$a-$b",
+                id = "math-cmp-num-$left-$right",
                 category = TaskCategory.MATH,
                 prompt = prompt,
                 inputType = AnswerInputType.CHOICE,
-                choices = options.mapIndexed { i, l -> TaskChoice(i.toString(), l) },
+                choices = listOf(left, right).mapIndexed { i, n -> TaskChoice(i.toString(), n.toString()) },
                 acceptedAnswers = listOf(answer),
                 hint = entry.hint,
+                hints = Task.buildHints("Сравни два числа", entry.hint),
                 difficultyLevel = level,
                 skillTag = SkillTag.MATH_COMPARE
             )
@@ -191,6 +208,7 @@ class MathTemplateGenerator {
             ),
             acceptedAnswers = listOf(op),
             hint = entry.hint,
+            hints = Task.buildHints("Выбери знак сравнения", entry.hint),
             difficultyLevel = level,
             skillTag = SkillTag.MATH_COMPARE
         )
@@ -220,6 +238,7 @@ class MathTemplateGenerator {
                 choices = listOf(TaskChoice("y", "Да"), TaskChoice("n", "Нет")),
                 acceptedAnswers = listOf(answer),
                 hint = entry.hint,
+                hints = Task.buildHints("Сравни деньги и цену", entry.hint),
                 difficultyLevel = level,
                 skillTag = SkillTag.MATH_MIX
             )
@@ -243,6 +262,11 @@ class MathTemplateGenerator {
             inputType = AnswerInputType.NUMBER,
             acceptedAnswers = listOf(answer.toString()),
             hint = entry.hint,
+            hints = Task.buildHints(
+                soft = "Определи, какое действие нужно выполнить",
+                main = entry.hint,
+                strong = "Перепроверь вычисление ещё раз"
+            ),
             difficultyLevel = level,
             skillTag = entry.skillTag
         )

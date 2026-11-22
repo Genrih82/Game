@@ -5,13 +5,18 @@ import kotlin.random.Random
 /**
  * Корректирует [TaskRequest] по локальной статистике ученика:
  * усиливает слабые навыки и категории, слегка снижает вес сильных,
- * с заданной вероятностью закрепляет приоритетный слабый навык.
+ * с заданной вероятностью закрепляет приоритетный слабый или «застоявшийся» навык.
+ *
+ * Категорию серии выбирает [CategoryRotator], не этот класс: приоритетный навык
+ * применяется только если совпадает с уже выбранной категорией.
  *
  * @param preferWeakChance вероятность (0..1) выбрать слабый навык, если он не задан явно
+ * @param preferStaleChance вероятность выбрать давно не встречавшийся навык, если слабых нет
  * @param random источник случайности для выбора слабого навыка
  */
 class AdaptiveSelector(
     private val preferWeakChance: Double = 0.4,
+    private val preferStaleChance: Double = 0.35,
     private val random: Random = Random.Default
 ) {
     /**
@@ -73,6 +78,14 @@ class AdaptiveSelector(
         if (preferredSkill == null && weak.isNotEmpty() && random.nextDouble() < preferWeakChance) {
             preferredSkill = weak.first()
             preferredCategory = preferredSkill.category
+        }
+        if (preferredSkill == null) {
+            val stalePool = SkillTag.entries.filter { it.category in enabled }
+            val stale = stats.staleSkills(stalePool)
+            if (stale.isNotEmpty() && random.nextDouble() < preferStaleChance) {
+                preferredSkill = stale.first()
+                preferredCategory = preferredSkill.category
+            }
         }
 
         var offset = request.difficultyOffset

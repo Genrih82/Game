@@ -4,7 +4,16 @@ package com.learnlock.taskengine
 enum class TaskCategory {
     MATH,
     READING,
-    LOGIC
+    LOGIC,
+    ENGLISH;
+
+    /** Название категории для UI. */
+    fun displayNameRu(): String = when (this) {
+        MATH -> "Математика"
+        READING -> "Чтение"
+        LOGIC -> "Логика"
+        ENGLISH -> "Английский"
+    }
 }
 
 /**
@@ -14,6 +23,7 @@ enum class SkillTag {
     MATH_ADD,
     MATH_SUB,
     MATH_MUL,
+    MATH_DIV,
     MATH_COMPARE,
     MATH_MIX,
     READ_LETTER,
@@ -21,14 +31,19 @@ enum class SkillTag {
     READ_SYNONYM,
     LOGIC_SEQ,
     LOGIC_PATTERN,
-    LOGIC_WORD;
+    LOGIC_WORD,
+    LOGIC_ANALOGY,
+    ENG_VOCAB,
+    ENG_IRREGULAR,
+    ENG_THREE_FORMS;
 
     /** Категория, к которой относится навык. */
     val category: TaskCategory
         get() = when (this) {
-            MATH_ADD, MATH_SUB, MATH_MUL, MATH_COMPARE, MATH_MIX -> TaskCategory.MATH
+            MATH_ADD, MATH_SUB, MATH_MUL, MATH_DIV, MATH_COMPARE, MATH_MIX -> TaskCategory.MATH
             READ_LETTER, READ_ODD, READ_SYNONYM -> TaskCategory.READING
-            LOGIC_SEQ, LOGIC_PATTERN, LOGIC_WORD -> TaskCategory.LOGIC
+            LOGIC_SEQ, LOGIC_PATTERN, LOGIC_WORD, LOGIC_ANALOGY -> TaskCategory.LOGIC
+            ENG_VOCAB, ENG_IRREGULAR, ENG_THREE_FORMS -> TaskCategory.ENGLISH
         }
 
     /** Локализованное краткое название навыка для UI. */
@@ -36,6 +51,7 @@ enum class SkillTag {
         MATH_ADD -> "Сложение"
         MATH_SUB -> "Вычитание"
         MATH_MUL -> "Умножение"
+        MATH_DIV -> "Деление"
         MATH_COMPARE -> "Сравнение чисел"
         MATH_MIX -> "Смешанные примеры"
         READ_LETTER -> "Пропущенная буква"
@@ -44,6 +60,10 @@ enum class SkillTag {
         LOGIC_SEQ -> "Последовательности"
         LOGIC_PATTERN -> "Узоры"
         LOGIC_WORD -> "Текстовые задачи"
+        LOGIC_ANALOGY -> "Аналогии"
+        ENG_VOCAB -> "Словарь EN"
+        ENG_IRREGULAR -> "Неправильные глаголы"
+        ENG_THREE_FORMS -> "Три формы глагола"
     }
 }
 
@@ -69,6 +89,8 @@ data class TaskChoice(
  * Одна сгенерированная задача.
  *
  * @property acceptedAnswers допустимые ответы после нормализации; для NUMBER/TEXT — числа/строки
+ * @property hint краткая подсказка (совместимость); при пустом [hints] используется как единственный шаг
+ * @property hints ступени подсказки: от мягкой к более прямой
  */
 data class Task(
     val id: String,
@@ -78,9 +100,16 @@ data class Task(
     val choices: List<TaskChoice> = emptyList(),
     val acceptedAnswers: List<String>,
     val hint: String? = null,
+    val hints: List<String> = emptyList(),
     val difficultyLevel: Int,
     val skillTag: SkillTag
 ) {
+    /**
+     * Ступени подсказки для UI: [hints], иначе одна [hint], иначе пусто.
+     */
+    fun hintSteps(): List<String> = hints.filter { it.isNotBlank() }
+        .ifEmpty { listOfNotNull(hint?.takeIf { it.isNotBlank() }) }
+
     /**
      * Проверяет ответ пользователя без учёта регистра и с заменой запятой на точку.
      *
@@ -96,6 +125,23 @@ data class Task(
         /** Общая нормализация строковых ответов для сравнения. */
         fun normalize(value: String): String =
             value.trim().lowercase().replace(',', '.')
+
+        /**
+         * Собирает ступени подсказки: мягкая → основная → при необходимости усиленная.
+         * Пустые строки отбрасываются; дубликаты подряд схлопываются.
+         */
+        fun buildHints(soft: String?, main: String?, strong: String? = null): List<String> {
+            val steps = listOfNotNull(
+                soft?.takeIf { it.isNotBlank() },
+                main?.takeIf { it.isNotBlank() },
+                strong?.takeIf { it.isNotBlank() }
+            )
+            if (steps.isEmpty()) return emptyList()
+            return steps.fold(mutableListOf()) { acc, step ->
+                if (acc.lastOrNull() != step) acc.add(step)
+                acc
+            }
+        }
     }
 }
 
@@ -117,12 +163,14 @@ data class AttemptRecord(
  * @property categoryAccuracy точность по категориям
  * @property skillAccuracy точность по навыкам
  * @property skillAttempts число попыток по каждому навыку
+ * @property skillRecency сколько попыток назад навык встречался (0 — только что; нет в истории — отсутствует в карте)
  */
 data class LearnerStats(
     val overallAccuracy: Double = 0.7,
     val categoryAccuracy: Map<TaskCategory, Double> = emptyMap(),
     val skillAccuracy: Map<SkillTag, Double> = emptyMap(),
-    val skillAttempts: Map<SkillTag, Int> = emptyMap()
+    val skillAttempts: Map<SkillTag, Int> = emptyMap(),
+    val skillRecency: Map<SkillTag, Int> = emptyMap()
 ) {
     /**
      * Навыки с достаточным числом попыток и точностью ниже порога.
@@ -147,9 +195,20 @@ data class LearnerStats(
             .sortedByDescending { it.value }
             .map { it.key }
 
+    /**
+     * Навыки из [candidates], которые давно не встречались в недавней истории.
+     *
+     * @param window порог «давности» в числе попыток
+     */
+    fun staleSkills(candidates: Collection<SkillTag>, window: Int = 8): List<SkillTag> =
+        candidates
+            .filter { skill -> (skillRecency[skill] ?: Int.MAX_VALUE) >= window }
+            .sortedByDescending { skillRecency[it] ?: Int.MAX_VALUE }
+
     companion object {
         /**
          * Собирает [LearnerStats] из списка попыток.
+         * Порядок [attempts]: от более новых к более старым (как в DAO recent*).
          *
          * @param attempts история попыток; пустой список даёт значения по умолчанию
          */
@@ -164,11 +223,16 @@ data class LearnerStats(
                 list.count { it.correct }.toDouble() / list.size
             }
             val skillAttempts = bySkill.mapValues { it.value.size }
+            val skillRecency = linkedMapOf<SkillTag, Int>()
+            attempts.forEachIndexed { index, record ->
+                skillRecency.putIfAbsent(record.skillTag, index)
+            }
             return LearnerStats(
                 overallAccuracy = overall,
                 categoryAccuracy = categoryAccuracy,
                 skillAccuracy = skillAccuracy,
-                skillAttempts = skillAttempts
+                skillAttempts = skillAttempts,
+                skillRecency = skillRecency
             )
         }
     }
@@ -186,13 +250,16 @@ data class TaskRequest(
     val categoryWeights: Map<TaskCategory, Int> = mapOf(
         TaskCategory.MATH to 1,
         TaskCategory.READING to 1,
-        TaskCategory.LOGIC to 1
+        TaskCategory.LOGIC to 1,
+        TaskCategory.ENGLISH to 1
     ),
     val recentAccuracy: Double = 0.7,
     val forceEasier: Boolean = false,
     val preferredCategory: TaskCategory? = null,
     val preferredSkill: SkillTag? = null,
-    val learnerStats: LearnerStats? = null
+    val learnerStats: LearnerStats? = null,
+    /** Категория предыдущей задачи в серии — для [CategoryRotator]. */
+    val lastCategory: TaskCategory? = null
 )
 
 /**

@@ -150,7 +150,7 @@ fun LockTaskScreen(
                     if (task != null && taskId == task.id) {
                         LlPanel {
                             Text(
-                                task.category.name.lowercase().replaceFirstChar { it.titlecase() },
+                                task.category.displayNameRu(),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = LlColors.MintDeep
                             )
@@ -229,16 +229,23 @@ fun LockTaskScreen(
                             }
 
                             if (state.profile.hintsEnabled) {
+                                val steps = task.hintSteps()
+                                val canRevealMore = state.hintLevel < steps.size ||
+                                    (steps.isEmpty() && !state.hintUsed)
                                 LlGhostButton(
-                                    text = "Подсказка",
+                                    text = when {
+                                        state.hintLevel == 0 -> "Подсказка"
+                                        state.hintLevel < steps.size -> "Ещё подсказка"
+                                        else -> "Подсказка"
+                                    },
                                     onClick = onUseHint,
-                                    enabled = !state.hintUsed,
+                                    enabled = canRevealMore,
                                     elevated = false
                                 )
                             }
-                            if (state.hintVisible && task.hint != null) {
+                            if (state.hintVisible && state.currentHint != null) {
                                 Text(
-                                    task.hint!!,
+                                    state.currentHint!!,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = LlColors.MintDeep
                                 )

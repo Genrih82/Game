@@ -120,6 +120,7 @@ private class InMemorySession : LearnLockSession {
     override suspend fun setTasksSolved(value: Int) = update { it.copy(tasksSolved = value) }
     override suspend fun setConsecutiveWrong(value: Int) = update { it.copy(consecutiveWrong = value) }
     override suspend fun setAccuracy(value: Double) = update { it.copy(lastAccuracyWindow = value) }
+    override suspend fun setLastTaskCategory(value: String) = update { it.copy(lastTaskCategory = value) }
     override suspend fun clearUnlock() = update { it.copy(unlockedUntilMillis = 0L) }
 
     private fun update(block: (SessionState) -> SessionState) {

@@ -109,7 +109,7 @@ class TaskEngineTest {
         val attempts = List(5) {
             AttemptRecord(SkillTag.MATH_MUL, TaskCategory.MATH, correct = false)
         } + List(5) {
-            AttemptRecord(SkillTag.READ_LETTER, TaskCategory.READING, correct = true)
+            AttemptRecord(SkillTag.MATH_ADD, TaskCategory.MATH, correct = true)
         }
         val stats = LearnerStats.fromAttempts(attempts)
         assertTrue(SkillTag.MATH_MUL in stats.weakSkills())
@@ -119,13 +119,99 @@ class TaskEngineTest {
             val task = seeded.nextTask(
                 TaskRequest(
                     ageYears = 10,
-                    enabledCategories = setOf(TaskCategory.MATH, TaskCategory.READING),
+                    enabledCategories = setOf(TaskCategory.MATH),
                     learnerStats = stats
                 )
             )
             task.skillTag == SkillTag.MATH_MUL
         }
         assertTrue(mulCount >= 8, "expected frequent MATH_MUL, got $mulCount")
+    }
+
+    @Test
+    fun categoriesRotateAcrossCalls() {
+        val seeded = TaskEngine(random = Random(11))
+        val enabled = setOf(
+            TaskCategory.MATH,
+            TaskCategory.READING,
+            TaskCategory.LOGIC,
+            TaskCategory.ENGLISH
+        )
+        var last: TaskCategory? = null
+        val seen = mutableListOf<TaskCategory>()
+        repeat(8) {
+            val task = seeded.nextTask(
+                TaskRequest(ageYears = 9, enabledCategories = enabled, lastCategory = last)
+            )
+            seen += task.category
+            last = task.category
+        }
+        assertEquals(
+            listOf(
+                TaskCategory.MATH,
+                TaskCategory.READING,
+                TaskCategory.LOGIC,
+                TaskCategory.ENGLISH,
+                TaskCategory.MATH,
+                TaskCategory.READING,
+                TaskCategory.LOGIC,
+                TaskCategory.ENGLISH
+            ),
+            seen
+        )
+    }
+
+    @Test
+    fun hintStepsPreferMultiLevelList() {
+        val task = Task(
+            id = "h",
+            category = TaskCategory.MATH,
+            prompt = "1+1",
+            inputType = AnswerInputType.NUMBER,
+            acceptedAnswers = listOf("2"),
+            hint = "старая",
+            hints = listOf("мягкая", "прямая"),
+            difficultyLevel = 1,
+            skillTag = SkillTag.MATH_ADD
+        )
+        assertEquals(listOf("мягкая", "прямая"), task.hintSteps())
+    }
+
+    @Test
+    fun staleSkillPreferredWhenNoWeak() {
+        val recent = listOf(
+            SkillTag.MATH_ADD,
+            SkillTag.MATH_SUB,
+            SkillTag.MATH_DIV,
+            SkillTag.MATH_COMPARE,
+            SkillTag.MATH_MIX
+        ).flatMap { skill ->
+            List(2) { AttemptRecord(skill, TaskCategory.MATH, correct = true) }
+        }
+        val stats = LearnerStats.fromAttempts(recent)
+        assertTrue(SkillTag.MATH_MUL in stats.staleSkills(listOf(SkillTag.MATH_MUL)))
+        val selector = AdaptiveSelector(preferWeakChance = 0.0, preferStaleChance = 1.0, random = Random(2))
+        val refined = selector.refine(
+            TaskRequest(
+                ageYears = 10,
+                enabledCategories = setOf(TaskCategory.MATH),
+                learnerStats = stats
+            )
+        )
+        assertEquals(SkillTag.MATH_MUL, refined.preferredSkill)
+    }
+
+    @Test
+    fun preferredSkillMathDivIsHonored() {
+        val task = engine.nextTask(
+            TaskRequest(
+                ageYears = 11,
+                enabledCategories = setOf(TaskCategory.MATH),
+                preferredSkill = SkillTag.MATH_DIV
+            )
+        )
+        assertEquals(SkillTag.MATH_DIV, task.skillTag)
+        assertTrue(task.matches(task.acceptedAnswers.first()))
     }
 
     @Test
