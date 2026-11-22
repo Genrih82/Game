@@ -1,0 +1,39 @@
+---
+description: LearnLock module boundaries and dependency direction
+alwaysApply: true
+---
+
+# learnlock-architecture
+
+Modules
+
+1. `task-engine` — генерация задач, сложность, словарь, антиповтор. Без Android SDK.
+2. `app` — UI, профиль, PIN, сессия, блокировка устройства.
+
+Layers inside app
+
+1. `ui/` — Compose-экраны, тема, компоненты. Навигация собрана в `MainActivity`.
+2. `ui/viewmodel/` — состояние экрана. Вызывает `LearnLockRepository` и `LockController`, не открывает Room и не ставит alarm сам.
+3. `data/` — Room, DataStore, `PinHasher`, фасад `LearnLockRepository`.
+4. `lock/` — сервис, Accessibility, alarm, показ `LockActivity`. Единственная точка старта блокировки — `LockController`.
+
+Dependency direction
+
+`ui → viewmodel → LearnLockRepository → task-engine / Room / DataStore`.
+
+`lock` вызывает `LearnLockRepository` и `LockController`. `task-engine` не импортирует пакеты `app`.
+
+Hard constraints
+
+- Новая категория задач добавляется провайдером в `task-engine` и значением `TaskCategory`, а не веткой в Activity.
+- Показ задачи решает только `LearnLockRepository.shouldPresentLock`. Не дублируй это условие в сервисе и в Composable.
+- Следующий запуск считает `LearnLockRepository.scheduleNextLaunch`. `LockController.scheduleNextLaunch` только ставит уже посчитанный alarm.
+- Число верных ответов до разблокировки — `tasksToUnlock` и `SessionState.tasksSolved`. Не возвращай модель «один ответ открывает сессию на sessionMinutes».
+- PIN хранится только через `PinHasher`. Три ошибки блокируют ввод на 30 секунд в `parent_auth`.
+- На consumer Android это трение, не kiosk. Не обещай абсолютную блокировку и не расширяй Device Owner без просьбы.
+
+Before a large change
+
+1. Согласуй с пользователем (см. `learnlock-core`).
+2. Назови слой-владельца и что не трогаешь.
+3. После согласования сделай минимальный diff в этом слое.

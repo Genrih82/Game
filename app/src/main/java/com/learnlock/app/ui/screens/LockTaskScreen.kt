@@ -18,6 +18,11 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -57,7 +62,9 @@ fun LockTaskScreen(
     onUseHint: () -> Unit,
     onParentUnlock: (String) -> Unit,
     onDismissIfUnlocked: () -> Unit,
-    onToggleParentPin: (Boolean) -> Unit = {}
+    onToggleParentPin: (Boolean) -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+    onOpenHelp: () -> Unit = {}
 ) {
     LaunchedEffect(state.unlocked) {
         if (state.unlocked) {
@@ -90,14 +97,32 @@ fun LockTaskScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onOpenSettings) {
+                    Icon(Icons.Outlined.Settings, contentDescription = "Настройки", tint = LlColors.Mist)
+                }
+                IconButton(onClick = onOpenHelp) {
+                    Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Справка", tint = LlColors.Mist)
+                }
+            }
             LlBrandMark(
                 light = true,
                 subtitle = "Реши задачу — и телефон снова твой"
             )
             Text(
-                "Решено: ${state.tasksSolved} из ${state.tasksRequired}",
+                if (state.unlimited) {
+                    val total = state.sessionCorrect + state.sessionWrong
+                    "Всего: $total · верных: ${state.sessionCorrect} · неверных: ${state.sessionWrong}"
+                } else {
+                    "Решено: ${state.tasksSolved} из ${state.tasksRequired}"
+                },
                 color = LlColors.Mist,
-                style = MaterialTheme.typography.titleMedium
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center
             )
 
             AnimatedContent(
@@ -205,9 +230,10 @@ fun LockTaskScreen(
 
                             if (state.profile.hintsEnabled) {
                                 LlGhostButton(
-                                    text = if (state.hintUsed) "Подсказка использована" else "Подсказка",
+                                    text = "Подсказка",
                                     onClick = onUseHint,
-                                    enabled = !state.hintUsed
+                                    enabled = !state.hintUsed,
+                                    elevated = false
                                 )
                             }
                             if (state.hintVisible && task.hint != null) {
@@ -234,6 +260,14 @@ fun LockTaskScreen(
             }
 
             Spacer(Modifier.height(8.dp))
+            if (!state.unlimited && !state.unlocked) {
+                Text(
+                    "Чтобы разблокировать телефон, решите верно ${state.tasksRequired} заданий.",
+                    color = LlColors.MistDeep,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center
+                )
+            }
             LlGhostButton(
                 text = if (state.showParentPin) "Скрыть PIN родителя" else "Родительский PIN",
                 onClick = { onToggleParentPin(!state.showParentPin) }

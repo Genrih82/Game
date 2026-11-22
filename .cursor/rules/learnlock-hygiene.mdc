@@ -1,0 +1,27 @@
+---
+description: Remove LearnLock development junk and keep secrets and generated builds out of the tree
+alwaysApply: true
+---
+
+# learnlock-hygiene
+
+После доработки убери мусор, который появился в ходе работы.
+
+Удаляй и не оставляй
+
+- Копии `app/build/`, `task-engine/build/`, `.gradle/`, каталоги `*-mail/`, zip и apk на Desktop
+- Одноразовые скрипты, которые не вызывают сборка, тесты и `docs/`
+- Сгенерированные apk, `*.ap_`, `*.dex`, `build-log.txt`, `hs_err*`
+
+Документы и секреты
+
+- Новый текст для человека клади в `docs/`. Не добавляй в корень второй README, RESTORE или RELEASE.
+- Существующий `README.md` не раздувай инструкциями, которым место в `docs/`.
+- Не коммить `local.properties`, `*.keystore`, `google-services.json`, `.jdks/`, `.idea/`.
+- В проекте нет mail-pack. Не собирай `payload.txt` и архив для пересылки, пока пользователь сам не попросит.
+
+Перед финалом
+
+1. Новый файл либо нужен коду, тестам или `docs/`, либо удалён.
+2. В git не попадают каталоги сборки.
+3. Кратко перечисли изменённые пути. Payload не обещай, если скрипта упаковки нет.

@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,9 +24,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,6 +38,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.learnlock.app.ui.theme.LlColors
 
@@ -155,7 +156,7 @@ fun LlPrimaryButton(
     }
 }
 
-/** Вторичная outlined-кнопка. */
+/** Вторичная outlined-кнопка. Surface + BorderStroke — рамка без обрезки по углам. */
 @Composable
 fun LlGhostButton(
     text: String,
@@ -165,21 +166,36 @@ fun LlGhostButton(
     contentColor: Color = LlColors.TextPrimary,
     elevated: Boolean = true
 ) {
-    OutlinedButton(
+    val fill = if (enabled) LlColors.SurfaceElevated else LlColors.Mist
+    val label = if (enabled) contentColor else LlColors.TextSecondary
+    Surface(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier
             .fillMaxWidth()
-            .height(52.dp)
-            .then(if (elevated) Modifier.shadow(7.dp, ButtonShape) else Modifier),
+            .height(52.dp),
         shape = ButtonShape,
-        border = BorderStroke(1.dp, LlColors.MistDeep.copy(alpha = 0.72f)),
-        colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = LlColors.SurfaceElevated.copy(alpha = 0.92f),
-            contentColor = contentColor
-        )
+        color = fill,
+        contentColor = label,
+        tonalElevation = 0.dp,
+        shadowElevation = if (elevated && enabled) 7.dp else 0.dp,
+        border = BorderStroke(1.dp, LlColors.MistDeep)
     ) {
-        Text(text, style = MaterialTheme.typography.labelLarge)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text,
+                style = MaterialTheme.typography.labelLarge,
+                color = label,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+        }
     }
 }
 

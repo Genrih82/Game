@@ -12,8 +12,8 @@ class ExpandedLogicProvider(
 ) : TaskProvider {
     override val category: TaskCategory = TaskCategory.LOGIC
 
-    private val names = listOf("Маши", "Пети", "Ани", "Игоря", "Серёжи", "Оли", "Кати", "Димы")
-    private val items = listOf("яблок", "карандашей", "наклеек", "конфет", "марок", "открыток")
+    private val people = TaskLexicon.logicPeople
+    private val items = TaskLexicon.logicItems
 
     /** Генерирует задачу с до 8 повторов при совпадении с [RepeatAvoidance]. */
     override fun generate(
@@ -23,7 +23,7 @@ class ExpandedLogicProvider(
     ): Task {
         var task = generateOnce(profile, random, preferredSkill)
         var attempts = 0
-        while (repeatAvoidance.isRecent(task) && attempts < 8) {
+        while (repeatAvoidance.isRecent(task) && attempts < 16) {
             task = generateOnce(profile, random, preferredSkill)
             attempts++
         }
@@ -276,19 +276,19 @@ class ExpandedLogicProvider(
 
     /** Сравнение количеств у двух персонажей («на N больше»). */
     private fun compareProblem(level: Int, random: Random): Task {
-        val n1 = names.random(random)
-        val n2 = names.filter { it != n1 }.random(random)
-        val item = items.random(random)
+        val p1 = people.random(random)
+        val p2 = people.filter { it != p1 }.random(random)
+        val noun = items.random(random)
         val a = random.nextInt(3, 15)
         val delta = random.nextInt(1, 6)
         val b = a + delta
         return Task(
-            id = "logic-cmpw-$n1-$a-$b-$item",
+            id = "logic-cmpw-${p1.nominative}-$a-$b-${noun.many}",
             category = category,
-            prompt = "У $n1 $a $item, у $n2 на $delta больше. Сколько $item у $n2?",
+            prompt = "У ${p1.genitive} $a ${RussianPlural.form(a, noun)}, у ${p2.genitive} на $delta больше. Сколько ${RussianPlural.howMany(noun)} у ${p2.genitive}?",
             inputType = AnswerInputType.NUMBER,
             acceptedAnswers = listOf(b.toString()),
-            hint = "Прибавь разницу к числу $n1",
+            hint = "Прибавь разницу к числу ${p1.genitive}",
             difficultyLevel = level,
             skillTag = SkillTag.LOGIC_WORD
         )
@@ -296,15 +296,15 @@ class ExpandedLogicProvider(
 
     /** Остаток после передачи части предметов другу. */
     private fun remainingProblem(level: Int, random: Random): Task {
-        val n1 = names.random(random)
-        val n2 = names.filter { it != n1 }.random(random)
-        val item = items.random(random)
+        val p1 = people.random(random)
+        val p2 = people.filter { it != p1 }.random(random)
+        val noun = items.random(random)
         val a = random.nextInt(8, 30)
         val gave = random.nextInt(1, a)
         return Task(
-            id = "logic-rem-$n1-$a-$gave-$item",
+            id = "logic-rem-${p1.nominative}-$a-$gave-${noun.many}",
             category = category,
-            prompt = "У $n1 было $a $item. Он отдал $gave $item другу $n2. Сколько $item осталось у $n1?",
+            prompt = "У ${p1.genitive} было $a ${RussianPlural.form(a, noun)}. ${p1.pronounHeSheCap} ${p1.gave} $gave ${RussianPlural.form(gave, noun)} другу ${p2.genitive}. Сколько ${RussianPlural.howMany(noun)} осталось у ${p1.genitive}?",
             inputType = AnswerInputType.NUMBER,
             acceptedAnswers = listOf((a - gave).toString()),
             hint = "Отними отданное от начального количества",
@@ -315,15 +315,23 @@ class ExpandedLogicProvider(
 
     /** Сумма шаров разных «цветов» в коробке. */
     private fun sumColors(level: Int, random: Random): Task {
-        val a = random.nextInt(2, 15)
-        val b = random.nextInt(2, 15)
-        val c = if (level <= 4) 0 else random.nextInt(1, 10)
+        val a = random.nextInt(1, 12)
+        val b = random.nextInt(1, 12)
+        val c = if (level <= 4) 0 else random.nextInt(1, 8)
         val total = a + b + c
-        val colors = if (c > 0) "красных, $b синих и $c зелёных" else "красных и $b синих"
+        val ball = TaskLexicon.ball
+        val red = RussianPlural.countedWithAdjective(a, "красный", "красных", ball)
+        val blue = RussianPlural.countedWithAdjective(b, "синий", "синих", ball)
+        val colors = if (c > 0) {
+            val green = RussianPlural.countedWithAdjective(c, "зелёный", "зелёных", ball)
+            "$red, $blue и $green"
+        } else {
+            "$red и $blue"
+        }
         return Task(
             id = "logic-col-$a-$b-$c",
             category = category,
-            prompt = "В коробке $a $colors шаров. Сколько всего шаров в коробке?",
+            prompt = "В коробке $colors. Сколько всего ${RussianPlural.howMany(ball)}?",
             inputType = AnswerInputType.NUMBER,
             acceptedAnswers = listOf(total.toString()),
             hint = "Сложи шары всех цветов",
@@ -334,19 +342,19 @@ class ExpandedLogicProvider(
 
     /** Цепочка сравнения возраста — кто самый старший. */
     private fun ageOrder(level: Int, random: Random): Task {
-        val n1 = names.random(random)
-        val rest = names.filter { it != n1 }.shuffled(random)
-        val n2 = rest[0]
-        val n3 = rest[1]
+        val p1 = people.random(random)
+        val rest = people.filter { it != p1 }.shuffled(random)
+        val p2 = rest[0]
+        val p3 = rest[1]
         return Task(
-            id = "logic-age-$n1-$n2-$n3",
+            id = "logic-age-${p1.nominative}-${p2.nominative}-${p3.nominative}",
             category = category,
-            prompt = "$n1 старше $n2, а $n2 старше $n3. Кто самый старший?",
+            prompt = "${p1.nominative} старше ${p2.genitive}, а ${p2.nominative} старше ${p3.genitive}. Кто самый старший?",
             inputType = AnswerInputType.CHOICE,
-            choices = listOf(n1, n2, n3).mapIndexed { index, label ->
-                TaskChoice(index.toString(), label)
+            choices = listOf(p1, p2, p3).mapIndexed { index, person ->
+                TaskChoice(index.toString(), person.nominative)
             },
-            acceptedAnswers = listOf(n1),
+            acceptedAnswers = listOf(p1.nominative),
             hint = "Сравни цепочку: кто старше всех?",
             difficultyLevel = level,
             skillTag = SkillTag.LOGIC_WORD
@@ -359,10 +367,11 @@ class ExpandedLogicProvider(
         val came = random.nextInt(1, 8)
         val left = random.nextInt(1, 8)
         val total = a + came - left
+        val bird = TaskLexicon.bird
         return Task(
             id = "logic-cnt-$a-$came-$left",
             category = category,
-            prompt = "На дереве сидело $a птиц. Прилетело ещё $came, потом улетели $left. Сколько птиц стало?",
+            prompt = "На дереве сидело $a ${RussianPlural.form(a, bird)}. Прилетело ещё $came, потом улетели $left. Сколько ${RussianPlural.howMany(bird)} стало?",
             inputType = AnswerInputType.NUMBER,
             acceptedAnswers = listOf(total.toString()),
             hint = "Сначала прибавь прилетевших, потом вычти улетевших",

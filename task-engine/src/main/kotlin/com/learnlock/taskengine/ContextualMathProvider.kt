@@ -21,7 +21,7 @@ class ContextualMathProvider(
     ): Task {
         var task = generateOnce(profile, random, preferredSkill)
         var attempts = 0
-        while (repeatAvoidance.isRecent(task) && attempts < 8) {
+        while (repeatAvoidance.isRecent(task) && attempts < 16) {
             task = generateOnce(profile, random, preferredSkill)
             attempts++
         }
@@ -50,8 +50,10 @@ class ContextualMathProvider(
      */
     private fun skillByLevel(level: Int, random: Random): SkillTag = when {
         level <= 2 -> SkillTag.MATH_ADD
-        level <= 4 -> if (random.nextBoolean()) SkillTag.MATH_SUB else SkillTag.MATH_ADD
-        level <= 6 -> listOf(SkillTag.MATH_MUL, SkillTag.MATH_COMPARE, SkillTag.MATH_SUB).random(random)
+        level == 3 -> if (random.nextBoolean()) SkillTag.MATH_ADD else SkillTag.MATH_SUB
+        level == 4 -> listOf(SkillTag.MATH_ADD, SkillTag.MATH_SUB, SkillTag.MATH_COMPARE).random(random)
+        level <= 6 -> listOf(SkillTag.MATH_SUB, SkillTag.MATH_MUL, SkillTag.MATH_COMPARE).random(random)
+        level <= 8 -> listOf(SkillTag.MATH_MUL, SkillTag.MATH_COMPARE, SkillTag.MATH_MIX).random(random)
         else -> SkillTag.MATH_MIX
     }
 

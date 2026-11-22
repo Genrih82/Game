@@ -1,0 +1,37 @@
+---
+description: Android data, PIN, Room and lock-service rules for the LearnLock app module
+globs: app/src/main/java/com/learnlock/app/data/**/*.kt,app/src/main/java/com/learnlock/app/lock/**/*.kt,app/src/main/java/com/learnlock/app/LearnLockApp.kt,app/src/main/AndroidManifest.xml
+alwaysApply: false
+---
+
+# learnlock-app
+
+Scope
+
+Данные, PIN и механизм блокировки в `:app`. Экраны описаны в `learnlock-ui`.
+
+Data
+
+- Схема Room — `AppDatabase`, сейчас version 7, файл `learnlock.db`.
+- Новая колонка или таблица: подними `version` и добавь `Migration`. Старые `MIGRATION_2_3` … `MIGRATION_6_7` не удаляй.
+- `fallbackToDestructiveMigration()` не заменяет миграцию. Не повышай версию, рассчитывая снести профиль и PIN.
+- Сессия лежит в DataStore `session`. Существующие ключи: `unlocked_until`, `next_launch_at`, `tasks_solved`, `consecutive_wrong`, `accuracy`. Переименование ключа — только с чтением старого значения.
+- `LearnLockRepository` — единственный фасад профиля, PIN, статистики, сессии и `TaskEngine`.
+
+PIN
+
+- В БД только `pinHash` и `salt`. Проверка идёт через `verifyParentPin`, не сравнением строк.
+- Не логируй введённый PIN, соль и хеш.
+- Сброс PIN — `clearParentPin`. Профиль ребёнка при этом не затирай.
+
+Lock
+
+- Экран задачи открывает `LockController.presentLock`. Повторно не открывай его, пока жива `LockActivity`.
+- Будильник — `LaunchAlarmReceiver` и тот request code, который уже использует `LockController`. После boot вызывай `scheduleNextLaunch`, если `lockEnabled`.
+- Интервал опроса `LockMonitorService` и канал `learnlock_launch` не дублируй вторым сервисом.
+- Пакеты контактов и SMS в `LearnLockAccessibilityService` не перехватывай. Новый пакет в исключения добавляй только по явной причине.
+- Не ставь `exported` без нужды. Accessibility остаётся с `BIND_ACCESSIBILITY_SERVICE`.
+
+Changes
+
+Перед правкой найди метод репозитория или `LockController`, который уже владеет сценарием. Смену условия показа задачи сверяй с `learnlock-compatibility`.

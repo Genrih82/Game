@@ -54,7 +54,7 @@ class VocabularyReadingProvider(
     ): Task {
         var task = generateOnce(profile, random, preferredSkill)
         var attempts = 0
-        while (repeatAvoidance.isRecent(task) && attempts < 8) {
+        while (repeatAvoidance.isRecent(task) && attempts < 16) {
             task = generateOnce(profile, random, preferredSkill)
             attempts++
         }

@@ -1,0 +1,26 @@
+---
+description: Pure Kotlin task generation rules for the LearnLock task-engine module
+globs: task-engine/**/*.kt
+alwaysApply: false
+---
+
+# learnlock-task-engine
+
+Scope
+
+Правило для `task-engine/` — JVM-библиотека без Android.
+
+Boundaries
+
+- Запрещены импорты `android.*`, Compose, Room, DataStore и классов из `com.learnlock.app`.
+- Публичный вход — `TaskEngine.nextTask(TaskRequest)`. Провайдеры: math, reading, logic.
+- Возраст в профиле сложности остаётся в диапазоне 5–16. Пустой список категорий — ошибка, не тихая подмена.
+- Общие модели — `Task`, `TaskCategory`, `SkillTag`, `TaskRequest`. Не заводи параллельные DTO в `app`.
+
+Changes
+
+- Новое задание клади в провайдер своей категории и в данные словаря или шаблона, не в UI.
+- `SkillTag` и `TaskCategory` меняй вместе: у навыка есть `category` и `displayNameRu()`.
+- Генератор должен проверяться без устройства. При смене выбора задачи, сложности или нормализации ответа обнови тест в `task-engine/src/test`.
+- Не подключай к модулю Android Gradle plugin и внешние библиотеки без просьбы.
+- Проверка: `gradlew.bat :task-engine:test`.

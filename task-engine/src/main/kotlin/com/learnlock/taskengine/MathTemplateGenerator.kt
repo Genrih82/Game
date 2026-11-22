@@ -7,16 +7,6 @@ import kotlin.random.Random
  * подстановка в шаблон и расчёт принимаемого ответа по типу навыка.
  */
 class MathTemplateGenerator {
-    private val namesNom = listOf(
-        "Миша", "Петя", "Аня", "Игорь", "Серёжа", "Оля", "Катя", "Дима", "Лена", "Витя", "Саша", "Настя"
-    )
-    private val namesGen = listOf(
-        "Миши", "Пети", "Ани", "Игоря", "Серёжи", "Оли", "Кати", "Димы", "Лены", "Вити", "Саши", "Насти"
-    )
-    private val items = listOf(
-        "яблок", "груш", "конфет", "карандашей", "наклеек", "шаров", "машинок", "книг", "мячей", "печений"
-    )
-
     /**
      * Генерирует задачу по записи каталога и профилю сложности.
      *
@@ -53,14 +43,9 @@ class MathTemplateGenerator {
 
         val price = random.nextInt(2, 20) * 50
         val money = random.nextInt(1, 25) * 50
-        val nameIdx = random.nextInt(namesGen.size)
-        val nameIdx2 = (nameIdx + 1 + random.nextInt(namesGen.size - 1)) % namesGen.size
-        val item = items.random(random)
-        val compareOp = when {
-            a > b -> ">"
-            a < b -> "<"
-            else -> "="
-        }
+        val personA = TaskLexicon.people.random(random)
+        val personB = TaskLexicon.people.filter { it != personA }.random(random)
+        val noun = TaskLexicon.items.random(random)
 
         val vars = mutableMapOf(
             "a" to a.toString(),
@@ -69,14 +54,31 @@ class MathTemplateGenerator {
             "sum" to (a + b).toString(),
             "diff" to (a - b).toString(),
             "prod" to (a * b).toString(),
-            "a_name" to namesGen[nameIdx],
-            "b_name" to namesGen[nameIdx2],
-            "item" to item,
+            "a_name" to personA.genitive,
+            "b_name" to personB.genitive,
+            "item" to RussianPlural.howMany(noun),
+            "item_a" to RussianPlural.form(a, noun),
+            "item_b" to RussianPlural.form(b, noun),
+            "item_c" to RussianPlural.form(c, noun),
+            "pupil_a" to RussianPlural.form(a, TaskLexicon.pupil),
+            "friend_a" to RussianPlural.form(a, TaskLexicon.friend),
+            "pack_b" to RussianPlural.form(b, TaskLexicon.pack),
+            "row_a" to RussianPlural.form(a, TaskLexicon.row),
+            "book_b" to RussianPlural.form(b, TaskLexicon.book),
+            "person_a" to RussianPlural.form(a, TaskLexicon.person),
+            "bird_a" to RussianPlural.form(a, TaskLexicon.bird),
+            "bird" to RussianPlural.howMany(TaskLexicon.bird),
             "price" to price.toString(),
+            "price_rub" to RussianPlural.form(price, TaskLexicon.ruble),
             "money" to money.toString(),
+            "money_rub" to RussianPlural.form(money, TaskLexicon.ruble),
             "op" to "?",
             "count" to a.toString(),
-            "name" to namesGen[nameIdx]
+            "name" to personA.genitive,
+            "pronoun" to personA.pronounHeShe,
+            "Pronoun" to personA.pronounHeSheCap,
+            "bought" to personA.bought,
+            "gave" to personA.gave
         )
         entry.variables.forEach { key ->
             if (key !in vars) vars[key] = a.toString()
@@ -91,8 +93,8 @@ class MathTemplateGenerator {
             c = c,
             price = price,
             money = money,
-            nameA = namesNom[nameIdx],
-            nameB = namesNom[nameIdx2],
+            nameA = personA.nominative,
+            nameB = personB.nominative,
             level = level
         )
     }
@@ -154,8 +156,11 @@ class MathTemplateGenerator {
                 skillTag = SkillTag.MATH_COMPARE
             )
         }
-        if ("что больше" in lower || "или" in lower) {
-            val larger = maxOf(a, b).toString()
+        if ("что больше" in lower || "какое число больше" in lower ||
+            "какое число меньше" in lower || "или" in lower || "какое больше" in lower
+        ) {
+            val pickSmaller = "меньше" in lower
+            val answer = (if (pickSmaller) minOf(a, b) else maxOf(a, b)).toString()
             val options = listOf(a, b).distinct().map { it.toString() }
             return Task(
                 id = "math-cmp-num-$a-$b",
@@ -163,7 +168,7 @@ class MathTemplateGenerator {
                 prompt = prompt,
                 inputType = AnswerInputType.CHOICE,
                 choices = options.mapIndexed { i, l -> TaskChoice(i.toString(), l) },
-                acceptedAnswers = listOf(larger),
+                acceptedAnswers = listOf(answer),
                 hint = entry.hint,
                 difficultyLevel = level,
                 skillTag = SkillTag.MATH_COMPARE
@@ -223,7 +228,7 @@ class MathTemplateGenerator {
             "×" in prompt || "*" in prompt -> a * b + c
             "вышли" in lower -> a - b + c
             "прилетело" in lower || "улетело" in lower -> a + b - c
-            "купил" in lower || "отдал" in lower -> a + b - c
+            "купил" in lower || "купила" in lower || "отдал" in lower || "отдала" in lower -> a + b - c
             else -> a + b - c
         }
         return numberTask(entry, prompt, result, level)

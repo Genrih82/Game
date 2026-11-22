@@ -8,7 +8,7 @@ import java.util.ArrayDeque
  *
  * @param capacity максимальное число хранимых отпечатков
  */
-class RepeatAvoidance(private val capacity: Int = 40) {
+class RepeatAvoidance(private val capacity: Int = 80) {
 
     private val recent = ArrayDeque<String>(capacity)
 
@@ -49,9 +49,17 @@ class RepeatAvoidance(private val capacity: Int = 40) {
          * @param task задача для учёта в буфере
          */
         fun fingerprint(task: Task): String {
+            // Цифры и имена схлопываем — «5 яблок у Миши» ≈ «7 яблок у Ани».
             val compact = Task.normalize(task.prompt)
+                .replace(Regex("\\d+"), "#")
+                .replace(
+                    Regex(
+                        "\\b(миши|пети|ани|игоря|серёжи|оли|кати|димы|лены|вити|саши|насти|маши)\\b"
+                    ),
+                    "#"
+                )
                 .replace(Regex("\\s+"), " ")
-                .take(120)
+                .take(100)
             return "${task.skillTag}|$compact"
         }
     }

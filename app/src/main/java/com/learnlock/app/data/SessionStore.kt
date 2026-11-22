@@ -12,10 +12,26 @@ import kotlinx.coroutines.flow.map
 private val Context.sessionDataStore by preferencesDataStore("session")
 
 /**
- * Хранилище текущей «свободной» сессии (DataStore Preferences).
- * Отдельно от Room, чтобы быстро читать/писать без миграций схемы.
+ * Операции сессии, от которых зависит показ задания и срок следующего запуска.
+ * DataStore-реализация — [SessionStore]. В тестах подставляется другая реализация.
  */
-class SessionStore(private val context: Context) {
+interface LearnLockSession {
+    val state: Flow<SessionState>
+    suspend fun setUnlockedUntil(millis: Long)
+    suspend fun setNextLaunchAt(millis: Long)
+    suspend fun setTasksSolved(value: Int)
+    suspend fun setConsecutiveWrong(value: Int)
+    suspend fun setAccuracy(value: Double)
+    suspend fun clearUnlock()
+}
+
+/**
+ * Хранилище текущей сессии (DataStore Preferences).
+ * Отдельно от Room, чтобы быстро читать/писать без миграций схемы.
+ * Паузу до следующего задания хранит [SessionState.nextLaunchAtMillis].
+ * Ключ `unlocked_until` остаётся в файле и показом не управляет.
+ */
+class SessionStore(private val context: Context) : LearnLockSession {
     private val unlockedUntil = longPreferencesKey("unlocked_until")
     private val nextLaunchAt = longPreferencesKey("next_launch_at")
     private val tasksSolved = intPreferencesKey("tasks_solved")
@@ -23,7 +39,7 @@ class SessionStore(private val context: Context) {
     private val accuracy = doublePreferencesKey("accuracy")
 
     /** Поток состояния сессии для UI и проверок блокировки. */
-    val state: Flow<SessionState> = context.sessionDataStore.data.map { prefs ->
+    override val state: Flow<SessionState> = context.sessionDataStore.data.map { prefs ->
         SessionState(
             unlockedUntilMillis = prefs[unlockedUntil] ?: 0L,
             nextLaunchAtMillis = prefs[nextLaunchAt] ?: 0L,
@@ -33,31 +49,31 @@ class SessionStore(private val context: Context) {
         )
     }
 
-    /** Задаёт момент, до которого телефон свободен без задачи. */
-    suspend fun setUnlockedUntil(millis: Long) {
+    /** Пишет устаревший ключ `unlocked_until`. Показ задания его не читает. */
+    override suspend fun setUnlockedUntil(millis: Long) {
         context.sessionDataStore.edit { it[unlockedUntil] = millis }
     }
 
-    suspend fun setNextLaunchAt(millis: Long) {
+    override suspend fun setNextLaunchAt(millis: Long) {
         context.sessionDataStore.edit { it[nextLaunchAt] = millis }
     }
 
-    suspend fun setTasksSolved(value: Int) {
+    override suspend fun setTasksSolved(value: Int) {
         context.sessionDataStore.edit { it[tasksSolved] = value }
     }
 
     /** Обновляет счётчик подряд идущих ошибок. */
-    suspend fun setConsecutiveWrong(value: Int) {
+    override suspend fun setConsecutiveWrong(value: Int) {
         context.sessionDataStore.edit { it[consecutiveWrong] = value }
     }
 
     /** Кэширует accuracy для генератора задач. */
-    suspend fun setAccuracy(value: Double) {
+    override suspend fun setAccuracy(value: Double) {
         context.sessionDataStore.edit { it[accuracy] = value }
     }
 
-    /** Немедленно завершает свободную сессию (кнопка «Завершить сессию»). */
-    suspend fun clearUnlock() {
+    /** Обнуляет только устаревший `unlocked_until`, не срок следующего запуска. */
+    override suspend fun clearUnlock() {
         context.sessionDataStore.edit { it[unlockedUntil] = 0L }
     }
 }

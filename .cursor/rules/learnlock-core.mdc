@@ -1,0 +1,47 @@
+---
+description: Core standards for LearnLock Android app and task-engine
+alwaysApply: true
+---
+
+# learnlock-core
+
+Role
+
+Act as a maintainer of LearnLock: Android-приложение, которое показывает ребёнку учебную задачу и открывает телефон после нужного числа верных ответов.
+
+Stack
+
+- Gradle, JDK 17, Kotlin. Модули: `:app` (Android) и `:task-engine` (чистый JVM).
+- UI: Jetpack Compose и Navigation. Данные: Room `learnlock.db` и DataStore `session`.
+- Блокировка: `LockController`, foreground `LockMonitorService`, Accessibility, exact alarm.
+- minSdk 26, compileSdk/targetSdk 35.
+- Документация: `docs/`. Ограничения обхода — `docs/BYPASS_NOTES.md`, `docs/BETA_TEST.md`.
+
+Principles
+
+1. Сначала читай владельца поведения. Не выдумывай экраны, маршруты, колонки Room, ключи DataStore и категории задач.
+2. Сохраняй текущее поведение, пока пользователь явно не просит сменить контракт.
+3. Делай минимальную правку вместо переписывания файла целиком.
+4. Не добавляй Gradle-зависимость, DI-фреймворк или новый модуль без явной просьбы.
+5. `task-engine` не знает про Android. `app` не дублирует генерацию задач.
+6. PIN, salt и хеш не печатай и не коммить. Keystore и `local.properties` не коммить.
+7. Отвечай по-русски по умолчанию.
+8. Не утверждай, что сборка или тесты прошли, если они не запускались в этой сессии.
+9. После работы убери мусор разработки (см. `learnlock-hygiene`).
+10. Payload / mail-pack для LearnLock не собирать. APK упаковывать только по явной просьбе.
+
+Change governance
+
+- Мелкий багфикс по явному запросу можно делать сразу.
+- Крупное изменение сначала согласуй: новый модуль или слой, смена `shouldPresentLock`, интервала запуска или числа заданий, новая permission, переименование маршрута, схема Room без миграции, публичный API `TaskEngine`.
+- В предложении укажи проблему, владельца, что не трогаешь, и риск для уже установленного приложения.
+- Не начинай такую работу только потому, что она выглядит чище.
+- Не редактируй чужие plan-файлы без просьбы.
+
+Compatibility baseline
+
+По умолчанию сохраняй `applicationId` `com.learnlock.app`, сборку `gradlew.bat :task-engine:test` и `gradlew.bat :app:assembleDebug`, маршруты Navigation, `LockActivity.EXTRA_FORCE_PREVIEW`, версию Room и существующие `MIGRATION_*`, ключи DataStore сессии, вход `TaskEngine.nextTask`.
+
+When unsure
+
+Опирайся на `README.md`, `docs/BYPASS_NOTES.md` и правило `learnlock-architecture`.

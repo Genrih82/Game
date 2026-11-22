@@ -2,7 +2,6 @@ package com.learnlock.app.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -13,6 +12,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -24,8 +24,6 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -39,20 +37,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.learnlock.app.data.ChildProfileEntity
-import com.learnlock.app.data.OutsideWindowMode
 import com.learnlock.app.ui.components.LlBackground
 import com.learnlock.app.ui.components.LlGhostButton
 import com.learnlock.app.ui.components.LlPanel
 import com.learnlock.app.ui.components.LlPrimaryButton
 import com.learnlock.app.ui.theme.LlColors
-import kotlin.math.roundToInt
 
 /**
- * Редактирование профиля ребёнка: возраст, сложность, длительность сессии,
- * окно часов, категории и подсказки.
+ * Редактирование профиля ребёнка: имя, фон, предметы и выключатель блокировки.
  * Чипы на узком экране переносятся через [FlowRow].
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -63,7 +59,6 @@ fun SettingsScreen(
     onSave: (ChildProfileEntity) -> Unit,
     onChangePin: () -> Unit = {},
     onResetPin: () -> Unit = {},
-    onOpenPermissions: () -> Unit = {},
     onBack: () -> Unit
 ) {
     var draft by remember(profile) {
@@ -73,11 +68,6 @@ fun SettingsScreen(
     var nameFocused by remember { mutableStateOf(false) }
     var nameErrorShown by remember { mutableStateOf(false) }
     var resetDialogVisible by remember { mutableStateOf(false) }
-    val chipColors = FilterChipDefaults.filterChipColors(
-        selectedContainerColor = LlColors.MintDeep,
-        selectedLabelColor = LlColors.TextOnAccent,
-        labelColor = Color.Black
-    )
     val backgroundChipColors = FilterChipDefaults.filterChipColors(
         selectedContainerColor = LlColors.MintDeep,
         selectedLabelColor = LlColors.TextOnAccent,
@@ -145,35 +135,28 @@ fun SettingsScreen(
                     Text("Введите имя минимум из двух символов", color = LlColors.TextSecondary, style = MaterialTheme.typography.bodySmall)
                 }
 
-                Text("Возраст: ${draft.ageYears}", style = MaterialTheme.typography.titleMedium)
-                Slider(
-                    value = draft.ageYears.toFloat(),
-                    onValueChange = {
-                        draft = draft.copy(ageYears = it.roundToInt().coerceIn(5, 16))
-                    },
-                    valueRange = 5f..16f,
-                    steps = 10,
-                    colors = SliderDefaults.colors(thumbColor = LlColors.MintDeep, activeTrackColor = LlColors.Mint)
-                )
-
-                Text("Сложность: ${difficultyLabel(draft.difficultyOffset)}", style = MaterialTheme.typography.titleMedium)
-                Slider(
-                    value = draft.difficultyOffset.toFloat(),
-                    onValueChange = {
-                        draft = draft.copy(difficultyOffset = it.roundToInt().coerceIn(-1, 1))
-                    },
-                    valueRange = -1f..1f,
-                    steps = 1,
-                    colors = SliderDefaults.colors(thumbColor = LlColors.MintDeep, activeTrackColor = LlColors.Mint)
-                )
-                Row(
+                Text("Возраст", style = MaterialTheme.typography.titleMedium)
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Легче", style = MaterialTheme.typography.bodySmall, color = LlColors.TextSecondary)
-                    Text("Норма", style = MaterialTheme.typography.bodySmall, color = LlColors.TextSecondary)
-                    Text("Сложнее", style = MaterialTheme.typography.bodySmall, color = LlColors.TextSecondary)
+                    (5..14).forEach { age ->
+                        FilterChip(
+                            selected = draft.ageYears == age,
+                            onClick = { draft = draft.copy(ageYears = age) },
+                            label = { Text("$age") },
+                            colors = backgroundChipColors
+                        )
+                    }
                 }
+
+                Text("Заданий для разблокировки", style = MaterialTheme.typography.titleMedium)
+                IntStepper(
+                    value = draft.tasksToUnlock,
+                    range = 1..20,
+                    onChange = { draft = draft.copy(tasksToUnlock = it) }
+                )
 
                 Text("Цвет фона", style = MaterialTheme.typography.titleMedium)
                 FlowRow(
@@ -192,116 +175,53 @@ fun SettingsScreen(
                     }
                 }
 
-                Text("Запускать каждые: ${draft.launchIntervalMinutes} мин", style = MaterialTheme.typography.titleMedium)
-                Slider(
-                    value = draft.launchIntervalMinutes.toFloat(),
-                    onValueChange = {
-                        draft = draft.copy(launchIntervalMinutes = it.roundToInt().coerceIn(5, 60))
-                    },
-                    valueRange = 5f..60f,
-                    steps = 10,
-                    colors = SliderDefaults.colors(thumbColor = LlColors.MintDeep, activeTrackColor = LlColors.Mint)
-                )
-
-                Text("Выполнить ${draft.tasksToUnlock} заданий для разблокировки", style = MaterialTheme.typography.titleMedium)
-                Slider(
-                    value = draft.tasksToUnlock.toFloat(),
-                    onValueChange = {
-                        draft = draft.copy(tasksToUnlock = it.roundToInt().coerceIn(1, 20))
-                    },
-                    valueRange = 1f..20f,
-                    steps = 18,
-                    colors = SliderDefaults.colors(thumbColor = LlColors.MintDeep, activeTrackColor = LlColors.Mint)
-                )
-                if (nextLaunchAtMillis > 0L) {
-                    Text(
-                        "Следующий запуск: ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(nextLaunchAtMillis))}",
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                Text("Упражнения", style = MaterialTheme.typography.titleLarge)
+                CategoryToggle("Математика", draft.mathEnabled) { enabled ->
+                    draft = draft.copy(mathEnabled = keepCategory(enabled, draft.readingEnabled, draft.logicEnabled))
                 }
-                if (draft.lockEnabled) {
-                    LlGhostButton("Права Android", onClick = onOpenPermissions)
+                CategoryToggle("Чтение", draft.readingEnabled) { enabled ->
+                    draft = draft.copy(readingEnabled = keepCategory(enabled, draft.mathEnabled, draft.logicEnabled))
                 }
-
-                Text("Окно: ${draft.activeWindowStartHour}:00–${draft.activeWindowEndHour}:00")
-                Slider(
-                    value = draft.activeWindowStartHour.toFloat(),
-                    onValueChange = {
-                        draft = draft.copy(activeWindowStartHour = it.roundToInt().coerceIn(0, 23))
-                    },
-                    valueRange = 0f..23f,
-                    steps = 22,
-                    colors = SliderDefaults.colors(thumbColor = LlColors.MintDeep, activeTrackColor = LlColors.Mint)
-                )
-                Slider(
-                    value = draft.activeWindowEndHour.toFloat(),
-                    onValueChange = {
-                        draft = draft.copy(activeWindowEndHour = it.roundToInt().coerceIn(0, 23))
-                    },
-                    valueRange = 0f..23f,
-                    steps = 22,
-                    colors = SliderDefaults.colors(thumbColor = LlColors.MintDeep, activeTrackColor = LlColors.Mint)
-                )
-
-                Text("Вне окна")
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = draft.outsideWindowMode == OutsideWindowMode.NO_TASKS.name,
-                        onClick = {
-                            draft = draft.copy(outsideWindowMode = OutsideWindowMode.NO_TASKS.name)
-                        },
-                        label = {
-                            Text(
-                                "Без задач",
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        },
-                        colors = chipColors
-                    )
-                    FilterChip(
-                        selected = draft.outsideWindowMode == OutsideWindowMode.HARD_BLOCK.name,
-                        onClick = {
-                            draft = draft.copy(outsideWindowMode = OutsideWindowMode.HARD_BLOCK.name)
-                        },
-                        label = {
-                            Text(
-                                "Полный запрет",
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        },
-                        colors = chipColors
-                    )
-                }
-
-                CategoryToggle("Математика", draft.mathEnabled) {
-                    draft = draft.copy(mathEnabled = it)
-                }
-                CategoryToggle("Чтение", draft.readingEnabled) {
-                    draft = draft.copy(readingEnabled = it)
-                }
-                CategoryToggle("Логика", draft.logicEnabled) {
-                    draft = draft.copy(logicEnabled = it)
+                CategoryToggle("Логика", draft.logicEnabled) { enabled ->
+                    draft = draft.copy(logicEnabled = keepCategory(enabled, draft.mathEnabled, draft.readingEnabled))
                 }
                 CategoryToggle("Подсказки", draft.hintsEnabled) {
                     draft = draft.copy(hintsEnabled = it)
                 }
 
-                Text("Ошибок до упрощения: ${draft.maxWrongBeforeEasier}")
-                Slider(
-                    value = draft.maxWrongBeforeEasier.toFloat(),
-                    onValueChange = {
-                        draft = draft.copy(maxWrongBeforeEasier = it.roundToInt().coerceIn(2, 5))
-                    },
-                    valueRange = 2f..5f,
-                    steps = 2,
-                    colors = SliderDefaults.colors(thumbColor = LlColors.MintDeep, activeTrackColor = LlColors.Mint)
-                )
+                Text("Блокировка экрана", style = MaterialTheme.typography.titleLarge)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        if (draft.lockEnabled) "Включена" else "Выключена",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = draft.lockEnabled,
+                        onCheckedChange = { draft = draft.copy(lockEnabled = it) },
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = LlColors.MintDeep,
+                            checkedThumbColor = LlColors.SurfaceElevated
+                        )
+                    )
+                }
+                if (draft.lockEnabled) {
+                    Text(
+                        "Каждые ${draft.launchIntervalMinutes} мин. Для разблокировки нужно верно решить ${draft.tasksToUnlock} заданий.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = LlColors.TextSecondary
+                    )
+                    if (nextLaunchAtMillis > 0L) {
+                        Text(
+                            "Следующий запуск: ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(nextLaunchAtMillis))}",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                }
             }
 
             LlPrimaryButton("Сохранить", onClick = { onSave(draft.copy(displayName = draft.displayName.trim())) }, enabled = nameValid, coral = true, elevated = true)
@@ -322,6 +242,41 @@ fun SettingsScreen(
                 )
             }
             }
+        }
+    }
+}
+
+private fun keepCategory(enabled: Boolean, otherA: Boolean, otherB: Boolean): Boolean {
+    if (!enabled && !otherA && !otherB) return true
+    return enabled
+}
+
+@Composable
+private fun IntStepper(value: Int, range: IntRange, onChange: (Int) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        TextButton(
+            onClick = { onChange((value - 1).coerceIn(range)) },
+            enabled = value > range.first,
+            modifier = Modifier.widthIn(min = 72.dp)
+        ) {
+            Text("−", style = MaterialTheme.typography.headlineMedium, color = LlColors.MintDeep)
+        }
+        Text(
+            value.toString(),
+            style = MaterialTheme.typography.headlineSmall,
+            color = LlColors.TextPrimary,
+            textAlign = TextAlign.Center
+        )
+        TextButton(
+            onClick = { onChange((value + 1).coerceIn(range)) },
+            enabled = value < range.last,
+            modifier = Modifier.widthIn(min = 72.dp)
+        ) {
+            Text("+", style = MaterialTheme.typography.headlineMedium, color = LlColors.MintDeep)
         }
     }
 }
@@ -350,10 +305,4 @@ private fun CategoryToggle(label: String, checked: Boolean, onChange: (Boolean) 
             )
         )
     }
-}
-
-private fun difficultyLabel(offset: Int): String = when (offset) {
-    -1 -> "Легче"
-    1 -> "Сложнее"
-    else -> "Норма"
 }

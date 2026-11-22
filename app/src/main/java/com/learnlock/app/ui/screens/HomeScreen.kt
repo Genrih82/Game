@@ -14,15 +14,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -55,7 +54,6 @@ fun HomeScreen(
     onOpenStats: () -> Unit,
     onOpenHelp: () -> Unit,
     onOpenPermissions: () -> Unit,
-    onToggleLock: (Boolean) -> Unit,
     onPreviewLock: () -> Unit
 ) {
     val firstLaunch = !state.hasParentPin
@@ -86,11 +84,16 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        "LearnLock",
-                        style = MaterialTheme.typography.displayMedium,
-                        color = LlColors.MintDeep
-                    )
+                    IconButton(
+                        onClick = onOpenSettings,
+                        modifier = Modifier.shadow(6.dp, androidx.compose.foundation.shape.CircleShape),
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = LlColors.SurfaceElevated.copy(alpha = 0.94f),
+                            contentColor = LlColors.MintDeep
+                        )
+                    ) {
+                        Icon(Icons.Outlined.Settings, contentDescription = "Настройки")
+                    }
                     IconButton(
                         onClick = onOpenHelp,
                         modifier = Modifier.shadow(6.dp, androidx.compose.foundation.shape.CircleShape),
@@ -99,47 +102,35 @@ fun HomeScreen(
                             contentColor = LlColors.MintDeep
                         )
                     ) {
-                        Icon(Icons.Outlined.HelpOutline, contentDescription = "Справка")
+                        Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Справка")
                     }
                 }
+                Text(
+                    "LearnLock",
+                    style = MaterialTheme.typography.displayMedium,
+                    color = LlColors.MintDeep
+                )
                 Text(
                     "Реши — и телефон твой",
                     style = MaterialTheme.typography.headlineSmall,
                     color = LlColors.TextPrimary
                 )
                 Text(
-                    "${state.profile.displayName} · ${state.profile.ageYears} лет · запускать каждые ${state.profile.launchIntervalMinutes} мин",
+                    if (state.profile.lockEnabled) {
+                        "${state.profile.displayName} · ${state.profile.ageYears} лет · запускать каждые ${state.profile.launchIntervalMinutes} мин"
+                    } else {
+                        "${state.profile.displayName} · ${state.profile.ageYears} лет"
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = LlColors.TextSecondary
                 )
 
-                LlPanel {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            "Блокировка после сна\n" +
-                                if (state.profile.lockEnabled) "Включена" else "Выключена",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f)
-                        )
-                        Switch(
-                            checked = state.profile.lockEnabled,
-                            onCheckedChange = onToggleLock,
-                            colors = SwitchDefaults.colors(
-                                checkedTrackColor = LlColors.MintDeep,
-                                checkedThumbColor = LlColors.SurfaceElevated
-                            )
-                        )
-                    }
-                    if (!firstLaunch) {
+                if (state.profile.lockEnabled && !firstLaunch) {
+                    LlPanel {
+                        Text("Блокировка включена", style = MaterialTheme.typography.titleMedium)
                         Text("Запуск в: $untilText", style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            "Ошибок подряд: ${state.session.consecutiveWrong}",
+                            "Заданий для разблокировки: ${state.profile.tasksToUnlock}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = LlColors.TextSecondary
                         )
@@ -148,8 +139,6 @@ fun HomeScreen(
 
                 if (!state.hasParentPin) {
                     LlPrimaryButton("Начать настройку", onClick = onOpenOnboarding, coral = true)
-                } else {
-                    LlPrimaryButton("Настройки", onClick = onOpenSettings)
                 }
 
                 LlGhostButton("Задания по желанию", onClick = onPreviewLock)

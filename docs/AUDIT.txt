@@ -1,0 +1,420 @@
+Аудит LearnLock
+Дата: 20 ноября 2026
+Объём: код, тесты и docs репозитория. Исправления не вносились.
+Прогон на телефоне и gradlew в сессии аудита не запускался.
+
+Сборка поверх уже установленной Room version 6 профиль и PIN не стирает. Блокирующего дефекта обновления нет. Ниже четыре дефекта, которые ломают уже работающую блокировку.
+
+Серьёзность    Количество
+Critical       4
+High           3
+Medium         6
+Low            0
+
+
+Critical
+========
+
+1. Рубильник блокировки на главном экране не спрашивает PIN
+Уверенность: подтверждено.
+
+Место: HomeScreen, переключатель; MainViewModel.setLockEnabled.
+
+Доказательство. Кнопка «Настройки» при существующем PIN идёт в settings_pin. Переключатель «Блокировка после сна» вызывает setLockEnabled сразу.
+
+MainActivity.kt, строки 74–76:
+
+                onOpenSettings = {
+                    if (vm.uiState.hasParentPin) navController.navigate("settings_pin") else navController.navigate("settings")
+                },
+
+MainViewModel.kt, строки 104–106:
+
+    fun setLockEnabled(enabled: Boolean) {
+        saveProfile(uiState.profile.copy(lockEnabled = enabled))
+    }
+
+saveProfile пишет lockEnabled = false, затем останавливает LockMonitorService. shouldPresentLock после этого сразу возвращает false.
+
+Условие. Ребёнок открывает LearnLock в свободном интервале, либо добирается до главного экрана, пока задание не на переднем плане. PIN не нужен.
+
+Состояние. До: lockEnabled = true, сервис жив, alarm может стоять. После: lockEnabled = false, сервис остановлен, tasksSolved и failedAttempts этим вызовом не трогаются, но planNextLaunch всё равно переписывает nextLaunchAtMillis на «сейчас + интервал» и обнуляет tasksSolved. LockActivity сама не закрывается. Следующий опрос задание уже не покажет.
+
+Последствие. Ребёнок выключает блокировку без родителя. PIN и профиль в Room остаются.
+
+Исправление. Пока hasParentPin истинно, не вызывать setLockEnabled с главного экрана: тот же verifyParentPin, что открывает settings_pin, и только после valid писать lockEnabled.
+
+
+2. Открытие приложения при уже наступившем запуске выдаёт интервал без заданий
+Уверенность: подтверждено.
+
+Место: MainViewModel.bootstrap, вход на маршрут settings, LearnLockRepository.refreshNextLaunchIfExpired.
+
+Доказательство. При создании MainActivity и при каждом входе в настройки вызывается обновление. Если nextLaunchAtMillis равен 0 или уже наступил, это полный scheduleNextLaunch.
+
+MainViewModel.kt, строки 41–45:
+
+        viewModelScope.launch {
+            repository.ensureDefaults()
+            repository.refreshNextLaunchIfExpired()
+            LockController.scheduleNextLaunch(getApplication())
+
+MainActivity.kt, строки 150–151:
+
+        composable("settings") {
+            LaunchedEffect(Unit) { vm.refreshNextLaunchIfExpired() }
+
+LearnLockRepository.kt, строки 95–99:
+
+    suspend fun refreshNextLaunchIfExpired() {
+        val session = sessionStore.state.first()
+        if (session.nextLaunchAtMillis == 0L || session.nextLaunchAtMillis <= System.currentTimeMillis()) {
+            scheduleNextLaunch()
+        }
+    }
+
+scheduleNextLaunch пишет nextLaunchAtMillis = now + launchIntervalMinutes (не меньше 5), tasksSolved = 0, consecutiveWrong = 0. Будущее время эта функция не сдвигает: при простом открытии настроек, пока запуск ещё впереди, условие ложно и запись не делается.
+
+Условие. Блокировка включена, срок запуска уже наступил, создаётся MainActivity (иконка, уведомление сервиса с intent на MainActivity, гибель процесса и новый заход). Тот же сдвиг делает вход в settings, если срок уже прошёл; до экрана настроек нужен PIN.
+
+Состояние. До: nextLaunchAtMillis <= now, tasksSolved может быть 1…N−1, LockActivity может быть жива. После: nextLaunchAtMillis в будущем, tasksSolved = 0, LockController.scheduleNextLaunch ставит alarm на новое время, shouldPresentLock становится false. failedAttempts и lockedUntilMillis не меняются.
+
+Последствие. Серия ответов стирается, телефон получает целый интервал без tasksToUnlock верных ответов. Если LockActivity.load ещё не прочитал сессию, он видит isSessionActive и сам закрывает задание через 1,1 с.
+
+Исправление. Убрать refreshNextLaunchIfExpired из bootstrap и из LaunchedEffect маршрута settings. Новый nextLaunchAtMillis писать только после набора tasksToUnlock, родительского PIN и явного сохранения интервала.
+
+
+3. Родительский PIN на экране задания не переносит следующий запуск
+Уверенность: подтверждено.
+
+Место: LockViewModel.parentUnlock, LearnLockRepository.unlockWithParentPin, LockController.scheduleNextLaunch.
+
+Доказательство. Верная серия сначала пишет срок в репозитории, потом ставит alarm. PIN вызывает только контроллер.
+
+LockViewModel.kt, строки 96–98:
+
+                if (completed) {
+                    repository.scheduleNextLaunch(uiState.profile)
+                    LockController.scheduleNextLaunch(application)
+
+LockViewModel.kt, строки 120–124:
+
+    fun parentUnlock(pin: String) {
+        viewModelScope.launch {
+            val ok = repository.unlockWithParentPin(pin)
+            if (ok) LockController.scheduleNextLaunch(application)
+
+LearnLockRepository.kt, строки 190–194:
+
+    suspend fun unlockWithParentPin(pin: String): Boolean {
+        if (!verifyParentPin(pin).valid) return false
+        val profile = getProfileOrDefault()
+        sessionStore.setTasksSolved(profile.tasksToUnlock.coerceAtLeast(1))
+        sessionStore.setConsecutiveWrong(0)
+
+nextLaunchAtMillis здесь не пишется. Контроллер читает старое значение и при прошлом или нулевом сроке выходит, не вызывая AlarmManager.
+
+LockController.kt, строки 47–48:
+
+            val atMillis = app.container.repository.observeSession().first().nextLaunchAtMillis
+            if (atMillis <= System.currentTimeMillis()) return@launch
+
+Условие. Задание уже на экране (nextLaunchAtMillis равен 0 или в прошлом), родитель вводит верный PIN.
+
+Состояние. До: срок просрочен, alarm на этот показ не вооружён, LockActivity жива, lockVisible = true. После верного PIN: tasksSolved становится равен tasksToUnlock, consecutiveWrong = 0, nextLaunchAtMillis остаётся просроченным, alarm не ставится. Экран 1,1 с показывает «Разблокировано родителем», затем finish. onDestroy сбрасывает lockVisible. shouldPresentLock остаётся true.
+
+Последствие. Родитель считает телефон открытым. Следующий 15-секундный опрос, SCREEN_ON или смена окна снова открывают задание. Alarm на прошедшее время код не ставит: он просто не ставит alarm вообще.
+
+Исправление. В parentUnlock после успешного unlockWithParentPin вызвать repository.scheduleNextLaunch, дождаться записи и только затем LockController.scheduleNextLaunch, как в ветке полной серии.
+
+
+4. Повторный показ не поднимает уже остановленную LockActivity
+Уверенность: подтверждено по коду. Что конкретная прошивка уничтожает activity по Home, на устройстве не проверялось.
+
+Место: LockController.presentLock, LockActivity.onDestroy.
+
+Доказательство. Флаг ставится до startActivity и снимается только в onDestroy. Повторный presentLock при живом флаге не вызывает startActivity.
+
+LockController.kt, строки 87–88:
+
+    fun presentLock(context: Context, forcePreview: Boolean = false) {
+        if (!forcePreview && !lockVisible.compareAndSet(false, true)) return
+
+LockActivity.kt, строки 23–26:
+
+    override fun onDestroy() {
+        LockController.onLockActivityClosed()
+        super.onDestroy()
+    }
+
+onLockActivityClosed обнуляет и lockVisible, и launchNotificationShown. Accessibility, опрос раз в 15 с и SCREEN_ON все идут в presentLock. Пока activity только остановлена (обычный Home: onStop без onDestroy), флаг остаётся true, и эти вызовы ничего не поднимают.
+
+Условие. Задание показано, nextLaunchAtMillis всё ещё просрочен, ребёнок уходит Home или в другое приложение, процесс не убивает LockActivity.
+
+Состояние. До ухода: LockActivity на экране, lockVisible = true, срок просрочен, tasksSolved как был. После ухода: activity жива в фоне, флаг true, alarm не переставляется, опрос и Accessibility не вызывают startActivity. После настоящего onDestroy: оба флага false; если срок всё ещё просрочен, ближайший опрос откроет задание снова.
+
+Последствие. Телефон остаётся свободным, хотя серия не добрана. Это ломает собственный возврат к заданию. Обходы из docs/BYPASS_NOTES.md (Safe Mode, force-stop, второй пользователь) сюда не относятся.
+
+Исправление. Если LockActivity ещё жива, повторный presentLock должен всё равно вызывать startActivity с уже стоящими FLAG_ACTIVITY_NEW_TASK | CLEAR_TOP | SINGLE_TOP, чтобы singleTask поднял тот же экземпляр. Сбрасывать lockVisible по-прежнему в onDestroy.
+
+
+High
+====
+
+5. Любое сохранение профиля и смена PIN начинают интервал заново
+Уверенность: подтверждено.
+
+Место: MainViewModel.planNextLaunch, его вызывают saveProfile и setPin.
+
+Доказательство. scheduleNextLaunch не смотрит, был ли прежний срок в будущем и менялся ли интервал.
+
+MainViewModel.kt, строки 117–119:
+
+    private suspend fun planNextLaunch(profile: ChildProfileEntity? = null) {
+        repository.scheduleNextLaunch(profile)
+        LockController.scheduleNextLaunch(getApplication())
+    }
+
+LearnLockRepository.kt, строки 85–92:
+
+    suspend fun scheduleNextLaunch(profile: ChildProfileEntity? = null) {
+        val currentProfile = profile ?: getProfileOrDefault()
+        val intervalMinutes = currentProfile.launchIntervalMinutes.coerceAtLeast(5)
+        val nextLaunchAt = System.currentTimeMillis() +
+            TimeUnit.MINUTES.toMillis(intervalMinutes.toLong())
+        sessionStore.setNextLaunchAt(nextLaunchAt)
+        sessionStore.setTasksSolved(0)
+
+Условие. Родитель сохраняет настройки или меняет PIN. Достаточно смены имени или цвета. Сюда же попадает переключатель с главного экрана.
+
+Состояние. До: nextLaunchAtMillis может быть через две минуты, tasksSolved может быть 9. После: срок равен «сейчас + интервал», tasksSolved = 0, consecutiveWrong = 0, alarm переставлен на новый срок. LockActivity, если была открыта, о пороге не узнает, пока сама не дойдёт до своей ветки.
+
+Последствие. Незаконченная серия стирается, ближайший запуск отодвигается на целый интервал.
+
+Исправление. Не вызывать scheduleNextLaunch из сохранения, если launchIntervalMinutes не изменился и записанный nextLaunchAtMillis ещё в будущем. Обнулять tasksSolved только в ветке, которая закрывает набранную серию или принимает родительский PIN.
+
+
+6. Два быстрых ответа считаются дважды
+Уверенность: подтверждено по коду. Длительность окна на устройстве не измерялась.
+
+Место: LockViewModel.submitAnswer.
+
+Доказательство. Пока coroutine не записала новое состояние, второй вызов проходит ту же проверку. Приращение — это чтение tasksSolved и отдельная запись, без атомарного шага.
+
+LockViewModel.kt, строки 89–97:
+
+    fun submitAnswer(raw: String) {
+        val task = uiState.task ?: return
+        if (uiState.cooldownSeconds > 0 || uiState.unlocked) return
+        viewModelScope.launch {
+            if (task.matches(raw)) {
+                val solved = repository.onCorrectAnswer(task, uiState.hintUsed)
+                val completed = solved >= uiState.tasksRequired
+
+LearnLockRepository.kt, строки 169–171:
+
+    suspend fun onCorrectAnswer(task: Task, usedHint: Boolean): Int {
+        val solved = sessionStore.state.first().tasksSolved + 1
+        sessionStore.setTasksSolved(solved)
+
+Условие. Два нажатия «Проверить» или два выбора варианта, пока первая запись в DataStore не закончилась. На неверном ответе то же окно есть до установки cooldownSeconds.
+
+Последствие. Порог tasksToUnlock достигается меньшим числом разных заданий, либо два параллельных чтения теряют одно приращение.
+
+Исправление. Держать в LockViewModel флаг «ответ уже проверяется» и не входить в submitAnswer, пока текущая coroutine не записала tasksSolved или cooldown.
+
+
+7. Переключатель до загрузки профиля может записать профиль по умолчанию
+Уверенность: гипотеза. Код это допускает; успевает ли палец раньше Flow из Room, без устройства не видно.
+
+Место: MainUiState, MainViewModel.setLockEnabled.
+
+Доказательство. Стартовое состояние — ChildProfileEntity(): имя «Ребёнок», возраст 8, интервал 30, tasksToUnlock 10, lockEnabled = false. observeProfile начинает писать в uiState только после ensureDefaults и refreshNextLaunchIfExpired. Переключатель на экране уже активен. upsert в ProfileDao делает REPLACE всей строки id = 1. Таблица parent_auth при этом не удаляется.
+
+Условие. Нажатие переключателя в промежутке до первого значения observeProfile.
+
+Последствие. Возраст, интервал, категории и имя заменяются дефолтом. PIN остаётся.
+
+Исправление. Не вызывать saveProfile из setLockEnabled, пока observeProfile не отдал сохранённую строку.
+
+
+Medium
+======
+
+8. Окно 7:00–21:00 на показ не влияет
+Уверенность: подтверждено. Это расхождение контракта, не догадка.
+
+Место: LearnLockRepository.shouldPresentLock и неиспользуемый outsideWindowDecision.
+
+Доказательство. KDoc обещает отказ вне окна в режиме NO_TASKS. Тело метода смотрит только lockEnabled и nextLaunchAtMillis. outsideWindowDecision в проекте никем не вызывается. Экран настроек при этом сохраняет часы и режимы «Без задач» / «Полный запрет».
+
+LearnLockRepository.kt, строки 111–122:
+
+     * Условия отказа: блокировка выключена, сессия ещё активна,
+     * либо сейчас вне окна и режим [OutsideWindowMode.NO_TASKS].
+     */
+    suspend fun shouldPresentLock(): Boolean {
+        val profile = getProfileOrDefault()
+        if (!profile.lockEnabled) return false
+        val session = sessionStore.state.first()
+        return session.nextLaunchAtMillis == 0L || session.nextLaunchAtMillis <= System.currentTimeMillis()
+    }
+
+Условие. Любой час суток, в том числе до 7:00 и после 21:00, при включённой блокировке и наступившем nextLaunchAtMillis.
+
+Последствие. Родитель выставляет «Без задач» и всё равно получает задание. Правило совместимости как раз описывает текущий код: показ режут выключенная блокировка и будущий срок. Расходится KDoc, настройки, docs/BETA_TEST.md (сценарий 7) и комментарий в Models.kt.
+
+Исправление. Не подключать outsideWindowDecision к shouldPresentLock без отдельного согласия на смену контракта. Поправить KDoc так, чтобы он описывал два фактических условия, и не обещать на экране настроек режим, который код не читает.
+
+
+9. Старые поля сессии выглядят как действующий контракт
+Уверенность: подтверждено.
+
+Место: ChildProfileEntity.sessionMinutes, accessDurationMinutes, SessionStore.unlocked_until, endSessionNow.
+
+Доказательство. isSessionActive сравнивает только nextLaunchAtMillis. setUnlockedUntil из кода приложения не вызывается. clearUnlock пишет лишь unlocked_until = 0. KDoc onCorrectAnswer говорит, что верный ответ открывает сессию на sessionMinutes. То же обещают README.md, docs/ANDROID_LOCK_SPIKE.md и текст онбординга «верный ответ открывает телефон на сессию». accessDurationMinutes пишется миграцией и сохраняется вместе с профилем, на alarm не влияет.
+
+Условие. Любой вызов endSessionNow, в том числе preview через LockViewModel.load(forcePreview = true).
+
+Последствие. «Завершить сессию» и preview не приближают следующий запуск. Сопровождение легко снова сделать источником истины unlockedUntil или sessionMinutes, хотя пауза сейчас живёт только в nextLaunchAtMillis.
+
+Исправление. Оставить показ на nextLaunchAtMillis. Поправить KDoc onCorrectAnswer, README, spike и строку онбординга на tasksToUnlock и launchIntervalMinutes. Не считать endSessionNow сбросом серии, пока он пишет только unlocked_until.
+
+
+10. Выключение блокировки не снимает alarm, и receiver снова поднимает сервис
+Уверенность: подтверждено. Сработает ли pending alarm после Doze, на устройстве не проверялось.
+
+Место: MainViewModel.saveProfile, LaunchAlarmReceiver.
+
+Доказательство. AlarmManager.cancel в дереве нет. При выключении planNextLaunch сначала ставит новый alarm, потом останавливает сервис. Receiver по срабатыванию безусловно вызывает startMonitoring, и только показ режет shouldPresentLock.
+
+LaunchAlarmReceiver.kt, строки 18–23:
+
+                LockController.startMonitoring(appContext)
+                if (app.container.repository.shouldPresentLock()) {
+                    LockController.showLaunchNotification(appContext)
+                    LockController.presentLock(appContext)
+                }
+                LockController.scheduleNextLaunch(appContext)
+
+Условие. Блокировку выключили, ранее поставленный RTC_WAKEUP ещё не сработал. После reboot pending alarm тоже сохраняется: BootCompletedReceiver при lockEnabled = false сервис не стартует, alarm это не отменяет.
+
+Последствие. Задание не показывается, потому что lockEnabled false. Сервис и уведомление возвращаются сами. Опрос раз в 15 с снова живёт внутри сервиса.
+
+Исправление. При lockEnabled = false отменять pending intent с request code 1002 и не ставить новый. В LaunchAlarmReceiver читать профиль и не вызывать startMonitoring, если блокировка выключена.
+
+
+11. Точный alarm и полноэкранное уведомление молча слабеют
+Уверенность: подтверждено по коду. Как это выглядит на API 33–35, не проверялось.
+
+Место: LockController.scheduleNextLaunch, PermissionsScreen, манифест.
+
+Доказательство. POST_NOTIFICATIONS объявлен, запроса runtime-разрешения в коде нет. Экран прав умеет открыть настройки exact alarm и батареи, но не уведомления и не full-screen intent. Если canScheduleExactAlarms() ложен, ставится setAndAllowWhileIdle, один раз, без повтора.
+
+LockController.kt, строки 56–62:
+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
+                !alarmManager.canScheduleExactAlarms()
+            ) {
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, pendingIntent)
+            } else {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, pendingIntent)
+            }
+
+showLaunchNotification вызывается до presentLock и без try/catch. Опрос 15 с — это delay внутри сервиса, отдельного alarm на него нет. Пока сервис жив, показ от опроса не зависит от точности будильника.
+
+Последствие. Без exact alarm момент запуска может уехать в окно Doze. Если процесс сервиса мёртв, динамический SCREEN_ON тоже мёртв. Манифестный ScreenEventReceiver на API 26+ для SCREEN_ON / USER_PRESENT платформа обычно не доставляет. Открытие иконки в этот момент попадает в дефект 2 и переносит срок.
+
+Исправление. Оставить существующий запасной setAndAllowWhileIdle. Рядом с кнопкой точных alarm запросить уже объявленный POST_NOTIFICATIONS и обернуть notify так, чтобы исключение из уведомления не пропускало presentLock.
+
+
+12. Логику :app можно проверить на JVM, тестов нет
+Уверенность: подтверждено.
+
+Место: в app/src нет src/test и src/androidTest. В task-engine тесты генерации и Task.matches есть (TaskEngineTest, GenerationInfraTest.allProvidersProduceMatchingAnswers). Нет теста на пустой набор категорий и на возраст вне 5–16.
+
+Последствие. Дефекты 2, 3, 5 и PIN-блокировка на 30 с не ловятся сборкой gradlew.bat :task-engine:test. Отсутствие UI-теста само по себе сюда не входит.
+
+Исправление. Добавить JVM-тесты на shouldPresentLock, refreshNextLaunchIfExpired, порог onCorrectAnswer, unlockWithParentPin вместе с записью nextLaunchAtMillis и на три ошибки verifyParentPin. Для движка добавить тест, что пустой enabledCategories даёт IllegalArgumentException, и что возраст вне 5–16 сужается до диапазона.
+
+
+13. Пустые категории в приложении тихо становятся математикой
+Уверенность: подтверждено.
+
+Место: LearnLockRepository.nextTask. Движок при пустом наборе бросает ошибку и подмену не делает.
+
+LearnLockRepository.kt, строки 136–138:
+
+                enabledCategories = profile.enabledCategories().ifEmpty {
+                    setOf(TaskCategory.MATH)
+                },
+
+TaskEngine.kt, строки 31–33:
+
+    fun nextTask(request: TaskRequest): Task {
+        val enabled = providers.filter { it.category in request.enabledCategories }
+        require(enabled.isNotEmpty()) { "At least one task category must be enabled" }
+
+Условие. В настройках выключены математика, чтение и логика. Возраст слайдер и так держит в 5…16; движок дополнительно делает coerceIn(5, 16). У каждого SkillTag есть category. Импортов android.* и com.learnlock.app в task-engine нет.
+
+Последствие. Ребёнок всё равно получает математику и может набрать tasksToUnlock. Порог разблокировки не обходится. Родитель видит три выключенных тумблера.
+
+Исправление. Убрать ifEmpty { MATH } и не давать экрану настроек сохранить профиль, в котором не осталось ни одной категории.
+
+
+14. Destructive fallback стирает профиль только если версии нет в цепочке 2→6
+Уверенность: подтверждено для кода. Есть ли в поле база version 1, по дереву не доказать.
+
+Место: AppDatabase.create.
+
+Доказательство. Версия 6. Подключены миграции 2→3, 3→4, 4→5, 5→6 и fallbackToDestructiveMigration().
+
+Что миграции делают с уже существующей строкой:
+
+- 2→3 добавляет backgroundColor со значением 0. PIN не трогает.
+- 3→4 добавляет launchIntervalMinutes и accessDurationMinutes с временным default 5, затем копирует в обе колонки sessionMinutes. Интервал не обнуляется. PIN не трогает.
+- 4→5 добавляет failedAttempts = 0 и lockedUntilMillis = 0. pinHash и salt не переписываются.
+- 5→6 добавляет tasksToUnlock со значением 10. Интервал и PIN остаются.
+
+Колонки окна, категорий, lockEnabled и skillTag в этих ALTER нет. Их наличие в version 2 по репозиторию не проверить: exportSchema = false, исходного CREATE TABLE нет. Если после цепочки схема не совпадёт с entity, Room падает на проверке. Зарегистрированная, но неудачная миграция сама по себе базу не уничтожает.
+
+Fallback срабатывает, когда пути нет: version 1 и любая версия вне 2…6. Тогда файл learnlock.db создаётся заново, профиль и PIN пропадают.
+
+Условие для уже установленной version 6 ложно: номер версии тот же, миграция и fallback не запускаются.
+
+Исправление. Удалить fallbackToDestructiveMigration(), чтобы неизвестная версия останавливала открытие базы, а не создавала пустую.
+
+
+Трассы без дефекта в самом сценарии
+===================================
+
+Граница модулей. Показ решает только shouldPresentLock. Срок считает только LearnLockRepository.scheduleNextLaunch. LockController.scheduleNextLaunch лишь читает уже записанный millis и ставит alarm, request code 1002. Экран открывает presentLock. UI не обращается к DAO, DataStore и PinHasher. Генерация из приложения идёт через TaskEngine.nextTask. isSessionActive читает тот же nextLaunchAtMillis, второго правила показа в живом коде нет. outsideWindowDecision к показу не подключён: это дефект 8, не вторая рабочая политика.
+
+Первый запуск. ensureDefaults создаёт профиль с lockEnabled = false, если строки нет. PIN нет, кнопка ведёт в онбординг, затем pin_setup, затем permissions_first, затем settings. setParentPin пишет PBKDF2: pinHash и salt, открытый PIN в базу не попадает. Первый nextLaunchAtMillis появляется ещё до включения блокировки, потому что bootstrap видит 0. Включение переключателя вызывает planNextLaunch ещё раз: срок становится «сейчас + интервал», сервис стартует, alarm ставится. До включения shouldPresentLock false. Это тот же переключатель, что в дефекте 1, и то же обнуление серии, что в дефекте 5.
+
+Верный ответ, порог ещё не взят. До: срок просрочен, tasksSolved = k, LockActivity жива, lockVisible = true. onCorrectAnswer пишет k+1, consecutiveWrong = 0, попытку в task_attempt. scheduleNextLaunch не вызывается, alarm не двигается. Экран остаётся, показывается следующая задача.
+
+Верный ответ, порог взят. onCorrectAnswer доводит счётчик, затем репозиторий записывает новый nextLaunchAtMillis и ставит tasksSolved = 0, и только после этого контроллер читает срок и ставит alarm. Экран 1,1 с показывает разблокировку и закрывается, onDestroy сбрасывает флаги. shouldPresentLock false, немедленного повтора нет.
+
+Неверный ответ. tasksSolved не уменьшается. consecutiveWrong растёт на 1. Пауза в ViewModel — две секунды. Новая задача запрашивается после неё. nextLaunchAtMillis и alarm не меняются. LockActivity остаётся.
+
+PIN. Три неверных: failedAttempts становится 1, затем 2, на третьем пишется 0 и lockedUntilMillis = now + 30 с. Четвёртая попытка, пока срок не вышел, возвращает valid = false и счётчик не увеличивает, даже если цифры верные. После 30 с верный PIN обнуляет failedAttempts и lockedUntilMillis. Смена PIN идёт маршрутом change_pin и возвращает в settings; новый хеш и соль заменяют старые, профиль ребёнка не удаляется. Сброс вызывает только parentAuthDao.delete() и уводит в onboarding. Вход в настройки с главного экрана при уже существующем PIN идёт через settings_pin. До конца bootstrap кнопка показывает «Начать настройку», а не «Настройки». На экране задания при блокировке PIN текст всегда «Неверный PIN», но verifyParentPin ввод всё равно отвергает. Гипотеза, на устройстве не проверялась: восстановленный back stack сразу на settings PIN повторно не спросит.
+
+Показ поверх уже открытого задания. Второй presentLock без force_preview выходит по lockVisible. Двух activity из-за этого нет. После честного finish успешной серии флаги сбрасываются, и задание в ту же секунду не возвращается, потому что срок уже в будущем. Повтор после ухода Home — это дефект 4, не эта ветка.
+
+Accessibility. Свои окна (packageName) выходят до shouldPresentLock. Контакты и SMS из списка тоже, и до срока, и после: так написано в сервисе, это не обещание полного запрета. Любое другое приложение до срока не открывает задание. После срока вызывает presentLock. exported="true" стоит вместе с BIND_ACCESSIBILITY_SERVICE. canRetrieveWindowContent="false".
+
+task-engine. Пустой набор категорий движок отвергает. Возраст 4 или 17 сужается до 5…16, ошибкой не считается. Навыка без category в SkillTag нет. Тесты проверяют генерацию математики, чтения и логики и совпадение ответа после нормализации регистра и пробелов.
+
+
+Без телефона это не подтверждается
+==================================
+
+- Samsung, Xiaomi и Huawei: автозапуск, убийство LockActivity по Home, ограничение Accessibility. В коде только текст на экране прав.
+- Выдан ли exact alarm и насколько setAndAllowWhileIdle уезжает в Doze.
+- Полноэкранный intent при USE_FULL_SCREEN_INTENT и показ уведомления без выданного POST_NOTIFICATIONS. Падает ли notify и пропускает ли из-за этого один presentLock, по платформе вероятно, на этом аппарате не видно.
+- Реальные обходы из docs/BYPASS_NOTES.md: Safe Mode, второй пользователь, force-stop, ADB, удаление. Код абсолютную блокировку не обещает, эти пути багом не считаются.
+- Доходит ли манифестный SCREEN_ON на API 26+. Динамический receiver зарегистрирован только внутри живого сервиса.
+- Успевает ли нажатие переключателя раньше первой строки профиля из Room.
+
+Эту сборку можно ставить поверх уже установленной version 6: номер Room тот же, миграция и destructive fallback не запускаются, профиль и PIN из-за обновления схемы не пропадают. Блокирующего дефекта такой установки нет.

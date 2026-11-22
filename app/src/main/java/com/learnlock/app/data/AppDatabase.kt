@@ -11,7 +11,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Локальная Room-БД LearnLock.
  * Хранит профиль ребёнка, родительский PIN и историю попыток.
  *
- * При смене схемы используется destructive migration (MVP).
+ * Смена схемы идёт только по миграциям 2→3→4→5→6→7.
+ * Неизвестная версия не пересоздаёт базу: профиль и PIN при этом сохраняются на диске,
+ * а открытие завершается ошибкой Room.
  */
 @Database(
     entities = [
@@ -19,7 +21,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ParentAuthEntity::class,
         TaskAttemptEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -57,6 +59,54 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** Убирает неиспользуемое окно часов и outsideWindowMode из профиля. */
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS child_profile_new (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        displayName TEXT NOT NULL,
+                        ageYears INTEGER NOT NULL,
+                        difficultyOffset INTEGER NOT NULL,
+                        sessionMinutes INTEGER NOT NULL,
+                        launchIntervalMinutes INTEGER NOT NULL,
+                        accessDurationMinutes INTEGER NOT NULL,
+                        tasksToUnlock INTEGER NOT NULL,
+                        backgroundColor INTEGER NOT NULL,
+                        mathEnabled INTEGER NOT NULL,
+                        readingEnabled INTEGER NOT NULL,
+                        logicEnabled INTEGER NOT NULL,
+                        mathWeight INTEGER NOT NULL,
+                        readingWeight INTEGER NOT NULL,
+                        logicWeight INTEGER NOT NULL,
+                        maxWrongBeforeEasier INTEGER NOT NULL,
+                        hintsEnabled INTEGER NOT NULL,
+                        lockEnabled INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    INSERT INTO child_profile_new (
+                        id, displayName, ageYears, difficultyOffset, sessionMinutes,
+                        launchIntervalMinutes, accessDurationMinutes, tasksToUnlock, backgroundColor,
+                        mathEnabled, readingEnabled, logicEnabled, mathWeight, readingWeight, logicWeight,
+                        maxWrongBeforeEasier, hintsEnabled, lockEnabled
+                    )
+                    SELECT
+                        id, displayName, ageYears, difficultyOffset, sessionMinutes,
+                        launchIntervalMinutes, accessDurationMinutes, tasksToUnlock, backgroundColor,
+                        mathEnabled, readingEnabled, logicEnabled, mathWeight, readingWeight, logicWeight,
+                        maxWrongBeforeEasier, hintsEnabled, lockEnabled
+                    FROM child_profile
+                    """.trimIndent()
+                )
+                database.execSQL("DROP TABLE child_profile")
+                database.execSQL("ALTER TABLE child_profile_new RENAME TO child_profile")
+            }
+        }
+
         /** Создаёт singleton-подобную БД `learnlock.db` в application context. */
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "learnlock.db")
@@ -64,7 +114,7 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(MIGRATION_3_4)
                 .addMigrations(MIGRATION_4_5)
                 .addMigrations(MIGRATION_5_6)
-                .fallbackToDestructiveMigration()
+                .addMigrations(MIGRATION_6_7)
                 .build()
     }
 }

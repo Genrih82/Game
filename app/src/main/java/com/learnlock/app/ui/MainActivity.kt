@@ -1,8 +1,9 @@
 package com.learnlock.app.ui
 
-import android.os.Bundle
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -39,8 +40,11 @@ import com.learnlock.app.ui.viewmodel.MainViewModelFactory
  * Экран задачи живёт в отдельной [com.learnlock.app.lock.LockActivity].
  */
 class MainActivity : ComponentActivity() {
+    private val openRoute = androidx.compose.runtime.mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        openRoute.value = intent.getStringExtra(EXTRA_OPEN)
         enableEdgeToEdge()
         val app = application as LearnLockApp
         setContent {
@@ -49,7 +53,11 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = Color.Transparent
                 ) {
-                    LearnLockNav(app)
+                    LearnLockNav(
+                        app = app,
+                        openRoute = openRoute.value,
+                        onOpenRouteConsumed = { openRoute.value = null }
+                    )
                 }
             }
         }
@@ -59,11 +67,27 @@ class MainActivity : ComponentActivity() {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1004)
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        openRoute.value = intent.getStringExtra(EXTRA_OPEN)
+    }
+
+    companion object {
+        const val EXTRA_OPEN = "open_route"
+        const val OPEN_SETTINGS = "settings"
+        const val OPEN_HELP = "help"
+    }
 }
 
 /** Граф навигации Compose для родительского/настроечного UI. */
 @Composable
-private fun LearnLockNav(app: LearnLockApp) {
+private fun LearnLockNav(
+    app: LearnLockApp,
+    openRoute: String?,
+    onOpenRouteConsumed: () -> Unit
+) {
     val navController = rememberNavController()
     val vm: MainViewModel = viewModel(
         factory = MainViewModelFactory(app, app.container.repository)
@@ -72,9 +96,21 @@ private fun LearnLockNav(app: LearnLockApp) {
     LaunchedEffect(Unit) {
         vm.bootstrap()
     }
-    LaunchedEffect(vm.uiState.bootstrapped) {
-        if (vm.uiState.bootstrapped && !vm.uiState.hasParentPin) {
-            navController.navigate("onboarding")
+
+    LaunchedEffect(vm.uiState.bootstrapped, openRoute) {
+        if (!vm.uiState.bootstrapped) return@LaunchedEffect
+        when (openRoute) {
+            MainActivity.OPEN_SETTINGS -> {
+                vm.suppressAutoTasks()
+                if (vm.uiState.hasParentPin) navController.navigate("settings_pin") else navController.navigate("settings")
+                onOpenRouteConsumed()
+            }
+            MainActivity.OPEN_HELP -> {
+                vm.suppressAutoTasks()
+                navController.navigate("help")
+                onOpenRouteConsumed()
+            }
+            else -> vm.openTasksIfReady()
         }
     }
 
@@ -89,14 +125,16 @@ private fun LearnLockNav(app: LearnLockApp) {
                 onOpenStats = { navController.navigate("stats") },
                 onOpenHelp = { navController.navigate("help") },
                 onOpenPermissions = { navController.navigate("permissions") },
-                onToggleLock = { enabled -> vm.setLockEnabled(enabled) },
-                onPreviewLock = { vm.previewLock(unlimitedMode = true) }
+                onPreviewLock = { vm.previewLock() }
             )
         }
         composable("onboarding") {
             OnboardingScreen(
+                hasPin = vm.uiState.hasParentPin,
                 backgroundColor = vm.uiState.profile.backgroundColor,
-                onContinueToSettings = { navController.navigate("settings") { popUpTo("onboarding") { inclusive = true } } }
+                onContinueToPin = { navController.navigate("pin_setup") },
+                onContinueToPermissions = { navController.navigate("permissions") },
+                onDone = { navController.popBackStack() }
             )
         }
         composable("pin_setup") {
@@ -157,12 +195,10 @@ private fun LearnLockNav(app: LearnLockApp) {
             )
         }
         composable("settings") {
-            LaunchedEffect(Unit) { vm.refreshNextLaunchIfExpired() }
             SettingsScreen(
                 profile = vm.uiState.profile,
                 nextLaunchAtMillis = vm.uiState.session.nextLaunchAtMillis,
                 onChangePin = { navController.navigate("change_pin") },
-                onOpenPermissions = { navController.navigate("permissions") },
                 onResetPin = {
                     vm.clearParentPin()
                     navController.navigate("onboarding") { popUpTo("settings") { inclusive = true } }

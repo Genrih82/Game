@@ -92,7 +92,7 @@ class GenerationInfraTest {
         assertTrue(buffer.isRecent(task))
         assertEquals(
             RepeatAvoidance.fingerprint(task),
-            "${SkillTag.MATH_ADD}|сколько будет 2 + 2?"
+            "${SkillTag.MATH_ADD}|сколько будет # + #?"
         )
     }
 

@@ -1,0 +1,34 @@
+---
+description: Use when changing LearnLock lock scheduling, Room schema, navigation, PIN or task-engine API
+alwaysApply: false
+---
+
+# learnlock-compatibility
+
+When this applies
+
+Рефакторинг и любые внешние контракты: схема Room, ключи сессии, маршруты, условие блокировки, PIN, публичный API `task-engine`, permissions в манифесте.
+
+Do not break by default
+
+1. Уже установленная `learnlock.db`: путь миграций 2→3→4→5→6→7.
+2. Профиль: `launchIntervalMinutes` (нижняя граница 5), `tasksToUnlock`, `backgroundColor`, `lockEnabled`.
+3. Сессия: следующий запуск в `nextLaunchAtMillis`, прогресс в `tasksSolved`.
+4. PIN: PBKDF2 через `PinHasher`; 3 ошибки дают 30 секунд в `lockedUntilMillis`.
+5. `shouldPresentLock`: выключенная блокировка или будущий `nextLaunchAt` означает, что экран не показывать.
+6. Маршруты из `learnlock-ui` и extra `force_preview`.
+7. `TaskEngine.nextTask`, `Task.acceptedAnswers` и набор `TaskCategory`.
+
+Safe change style
+
+- Новое поле добавляй рядом со старым, с default в миграции и в data class.
+- Не переименовывай колонку, ключ DataStore и route без чтения старого значения.
+- Не возвращай разблокировку «на N минут» через `unlockedUntil`, пока `isSessionActive` смотрит на `nextLaunchAt`.
+- `accessDurationMinutes` хранится и запуском не управляет. Не начинай им пользоваться без явной просьбы.
+- Ломающее изменение схемы или сценария блокировки ждёт согласия пользователя.
+
+Before finish
+
+- Напиши, что увидит уже установленное приложение после обновления.
+- Для схемы БД приведи SQL миграции.
+- Если прогона на устройстве или эмуляторе не было, так и напиши.

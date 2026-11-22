@@ -19,8 +19,11 @@ import com.learnlock.app.ui.theme.LlColors
 /** Короткий онбординг: объяснение продукта → PIN → права Android. */
 @Composable
 fun OnboardingScreen(
+    hasPin: Boolean,
     backgroundColor: Int = 0,
-    onContinueToSettings: () -> Unit
+    onContinueToPin: () -> Unit,
+    onContinueToPermissions: () -> Unit,
+    onDone: () -> Unit
 ) {
     LlBackground(backgroundColor = backgroundColor) {
         Column(
@@ -30,11 +33,19 @@ fun OnboardingScreen(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Text("Добро пожаловать", style = MaterialTheme.typography.displayMedium, color = LlColors.MintDeep)
+            Text("Как это работает", style = MaterialTheme.typography.displayMedium, color = LlColors.MintDeep)
             LlPanel {
-                Text("МОЗГ помогает детям тренировать математику, русский язык, чтение и логику. Родитель может настроить блокировку и задания.", style = MaterialTheme.typography.bodyLarge)
+                Text("1. После сна появляется задача", style = MaterialTheme.typography.bodyLarge)
+                Text("2. Нужное число верных ответов открывает телефон до следующего запуска", style = MaterialTheme.typography.bodyLarge)
+                Text("3. Родитель всегда может разблокировать PIN", style = MaterialTheme.typography.bodyLarge)
+                Text("4. Нужны права специальных возможностей и автозапуск", style = MaterialTheme.typography.bodyLarge)
             }
-            LlPrimaryButton("Продолжить", onClick = onContinueToSettings)
+            if (!hasPin) {
+                LlPrimaryButton("Создать PIN родителя", onClick = onContinueToPin, coral = true)
+            } else {
+                LlPrimaryButton("Проверить права", onClick = onContinueToPermissions)
+            }
+            LlGhostButton("Закрыть", onClick = onDone)
         }
     }
 }

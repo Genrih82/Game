@@ -22,9 +22,10 @@ class LearnLockAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
-        // Игнорируем собственные окна LearnLock, чтобы не зациклиться.
-        if (pkg == packageName) return
-        if (pkg in allowedPackages) return
+        val ownApp = pkg == packageName
+        val allowedApp = pkg in LockController.allowedDuringLock
+        LockController.onForegroundPackage(ownApp = ownApp, allowedApp = allowedApp)
+        if (ownApp || allowedApp) return
         val app = application as? LearnLockApp ?: return
         scope.launch {
             if (app.container.repository.shouldPresentLock()) {
@@ -34,12 +35,4 @@ class LearnLockAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() = Unit
-
-    private val allowedPackages = setOf(
-        "com.android.contacts",
-        "com.google.android.contacts",
-        "com.android.mms",
-        "com.google.android.apps.messaging",
-        "com.samsung.android.messaging"
-    )
 }

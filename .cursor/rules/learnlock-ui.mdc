@@ -1,0 +1,34 @@
+---
+description: Compose UI conventions for LearnLock screens, navigation and theme
+globs: app/src/main/java/com/learnlock/app/ui/**/*.kt,app/src/main/res/**/*
+alwaysApply: false
+---
+
+# learnlock-ui
+
+Scope
+
+Compose UI в `app/src/main/java/com/learnlock/app/ui` и ресурсы `res/`.
+
+Navigation
+
+Маршруты живут в `MainActivity`: `home`, `onboarding`, `pin_setup`, `change_pin`, `permissions`, `permissions_first`, `settings_pin`, `settings`, `stats`, `help`.
+
+- Настройки при существующем PIN открываются через `settings_pin`.
+- `change_pin` возвращает в `settings`, не в онбординг.
+- Сброс PIN ведёт в `onboarding` и снимает `settings` со стека.
+- Не переименовывай маршрут и не заводи второй граф без согласования.
+
+Screens
+
+- Переиспользуй `LlBackground`, `LlPanel`, `LlPrimaryButton`, `LlGhostButton`, `LlPinField` и цвета `LlColors`.
+- Фон бери из `profile.backgroundColor`. Не заводи отдельную палитру на одном экране.
+- Экран не читает Room и DataStore. Данные приходят из `MainViewModel` или `LockViewModel`.
+- ViewModel не ставит `AlarmManager` и не создаёт уведомление. Расписание — `repository.scheduleNextLaunch` и `LockController.scheduleNextLaunch`.
+- Тексты для родителя пиши по-русски, в том же тоне, что соседние экраны. Локальную строку оставь в Composable: отдельного каталога строк под каждый экран сейчас нет.
+
+Changes
+
+- Логику разблокировки не переноси в Composable. Экран задачи только вызывает `LockViewModel`.
+- Меняй стиль точечно. Не перерисовывай все экраны из-за одной кнопки.
+- Если сценарий родителя описан в `docs/`, обнови этот документ вместе с заметным изменением экрана.

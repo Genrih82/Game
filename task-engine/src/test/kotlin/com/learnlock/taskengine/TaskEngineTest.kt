@@ -3,10 +3,44 @@ package com.learnlock.taskengine
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class TaskEngineTest {
     private val engine = TaskEngine(random = Random(42))
+
+    @Test
+    fun emptyCategoriesAreRejected() {
+        assertFailsWith<IllegalArgumentException> {
+            engine.nextTask(
+                TaskRequest(
+                    ageYears = 8,
+                    enabledCategories = emptySet()
+                )
+            )
+        }
+    }
+
+    @Test
+    fun ageOutsideRangeMatchesClampedAge() {
+        val request = { age: Int ->
+            TaskRequest(
+                ageYears = age,
+                enabledCategories = setOf(TaskCategory.MATH),
+                difficultyOffset = 0,
+                recentAccuracy = 0.7
+            )
+        }
+        val younger = TaskEngine(random = Random(3)).nextTask(request(1))
+        val lowerBound = TaskEngine(random = Random(3)).nextTask(request(5))
+        assertEquals(lowerBound.difficultyLevel, younger.difficultyLevel)
+        assertEquals(lowerBound.prompt, younger.prompt)
+
+        val older = TaskEngine(random = Random(3)).nextTask(request(30))
+        val upperBound = TaskEngine(random = Random(3)).nextTask(request(16))
+        assertEquals(upperBound.difficultyLevel, older.difficultyLevel)
+        assertEquals(upperBound.prompt, older.prompt)
+    }
 
     @Test
     fun generatesMathWithinEnabledCategories() {

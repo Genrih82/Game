@@ -213,12 +213,18 @@ data class DifficultyProfile(
      * @return целое значение в диапазоне 1..10
      */
     fun level(): Int {
+        // Более плавная шкала: младшие — сложение/простые тексты; старше — mix и умножение.
         val base = when {
-            ageYears <= 6 -> 1
-            ageYears <= 8 -> 3
-            ageYears <= 10 -> 5
-            ageYears <= 12 -> 7
-            else -> 8
+            ageYears <= 5 -> 1
+            ageYears == 6 -> 2
+            ageYears == 7 -> 3
+            ageYears == 8 -> 4
+            ageYears == 9 -> 5
+            ageYears == 10 -> 6
+            ageYears == 11 -> 7
+            ageYears == 12 -> 8
+            ageYears == 13 -> 9
+            else -> 10
         }
         val accuracyAdjust = when {
             recentAccuracy < 0.4 -> -1
