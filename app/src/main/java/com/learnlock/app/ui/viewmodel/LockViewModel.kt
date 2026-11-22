@@ -28,7 +28,8 @@ data class LockUiState(
     val showParentPin: Boolean = false,
     val unlocked: Boolean = false,
     val tasksSolved: Int = 0,
-    val tasksRequired: Int = 1
+    val tasksRequired: Int = 1,
+    val unlimitedMode: Boolean = false
 )
 
 /**
@@ -46,16 +47,16 @@ class LockViewModel(
      * Загружает задачу.
      * @param forcePreview если true — сбрасывает сессию и всегда показывает задачу
      */
-    fun load(forcePreview: Boolean = false) {
+    fun load(forcePreview: Boolean = false, unlimitedMode: Boolean = false) {
         viewModelScope.launch {
             val profile = repository.getProfileOrDefault()
             val session = repository.observeSession().first()
             // Preview с главного экрана всегда показывает задачу.
-            if (!forcePreview && repository.isSessionActive()) {
+            if (!forcePreview && !unlimitedMode && repository.isSessionActive()) {
                 uiState = uiState.copy(loading = false, unlocked = true, profile = profile)
                 return@launch
             }
-            if (forcePreview) {
+            if (forcePreview && !unlimitedMode) {
                 repository.endSessionNow()
             }
             val task = repository.nextTask()
@@ -65,6 +66,7 @@ class LockViewModel(
                 profile = profile,
                 tasksSolved = session.tasksSolved,
                 tasksRequired = profile.tasksToUnlock.coerceAtLeast(1),
+                unlimitedMode = unlimitedMode,
                 task = task,
                 feedback = if (forcePreview) "Режим проверки задачи" else null
             )
@@ -93,7 +95,9 @@ class LockViewModel(
             if (task.matches(raw)) {
                 val solved = repository.onCorrectAnswer(task, uiState.hintUsed)
                 val completed = solved >= uiState.tasksRequired
-                if (completed) {
+                if (uiState.unlimitedMode) {
+                    uiState = uiState.copy(tasksSolved = solved, task = repository.nextTask(), hintVisible = false, hintUsed = false, feedback = "Верно. Следующее задание")
+                } else if (completed) {
                     repository.scheduleNextLaunch(uiState.profile)
                     LockController.scheduleNextLaunch(application)
                     uiState = uiState.copy(unlocked = true, tasksSolved = solved, feedback = "Все задания решены. Телефон разблокирован.")

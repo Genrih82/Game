@@ -84,10 +84,11 @@ object LockController {
      * Открывает экран задачи поверх приложений.
      * @param forcePreview true — показать задачу даже при активной сессии (кнопка проверки)
      */
-    fun presentLock(context: Context, forcePreview: Boolean = false) {
+    fun presentLock(context: Context, forcePreview: Boolean = false, unlimitedMode: Boolean = false) {
         if (!forcePreview && !lockVisible.compareAndSet(false, true)) return
         val intent = Intent(context, LockActivity::class.java).apply {
             putExtra(LockActivity.EXTRA_FORCE_PREVIEW, forcePreview)
+            putExtra(LockActivity.EXTRA_UNLIMITED_MODE, unlimitedMode)
             addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or

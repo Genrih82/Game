@@ -63,6 +63,7 @@ fun SettingsScreen(
     onSave: (ChildProfileEntity) -> Unit,
     onChangePin: () -> Unit = {},
     onResetPin: () -> Unit = {},
+    onOpenPermissions: () -> Unit = {},
     onBack: () -> Unit
 ) {
     var draft by remember(profile) {
@@ -217,6 +218,9 @@ fun SettingsScreen(
                         "Следующий запуск: ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(nextLaunchAtMillis))}",
                         style = MaterialTheme.typography.titleMedium
                     )
+                }
+                if (draft.lockEnabled) {
+                    LlGhostButton("Права Android", onClick = onOpenPermissions)
                 }
 
                 Text("Окно: ${draft.activeWindowStartHour}:00–${draft.activeWindowEndHour}:00")

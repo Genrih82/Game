@@ -1,6 +1,8 @@
 package com.learnlock.app.ui
 
 import android.os.Bundle
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -51,6 +53,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1004)
+        }
     }
 }
 
@@ -65,6 +72,11 @@ private fun LearnLockNav(app: LearnLockApp) {
     LaunchedEffect(Unit) {
         vm.bootstrap()
     }
+    LaunchedEffect(vm.uiState.bootstrapped) {
+        if (vm.uiState.bootstrapped && !vm.uiState.hasParentPin) {
+            navController.navigate("onboarding")
+        }
+    }
 
     NavHost(navController = navController, startDestination = "home") {
         composable("home") {
@@ -78,16 +90,13 @@ private fun LearnLockNav(app: LearnLockApp) {
                 onOpenHelp = { navController.navigate("help") },
                 onOpenPermissions = { navController.navigate("permissions") },
                 onToggleLock = { enabled -> vm.setLockEnabled(enabled) },
-                onPreviewLock = { vm.previewLock() }
+                onPreviewLock = { vm.previewLock(unlimitedMode = true) }
             )
         }
         composable("onboarding") {
             OnboardingScreen(
-                hasPin = vm.uiState.hasParentPin,
                 backgroundColor = vm.uiState.profile.backgroundColor,
-                onContinueToPin = { navController.navigate("pin_setup") },
-                onContinueToPermissions = { navController.navigate("permissions") },
-                onDone = { navController.popBackStack() }
+                onContinueToSettings = { navController.navigate("settings") { popUpTo("onboarding") { inclusive = true } } }
             )
         }
         composable("pin_setup") {
@@ -153,6 +162,7 @@ private fun LearnLockNav(app: LearnLockApp) {
                 profile = vm.uiState.profile,
                 nextLaunchAtMillis = vm.uiState.session.nextLaunchAtMillis,
                 onChangePin = { navController.navigate("change_pin") },
+                onOpenPermissions = { navController.navigate("permissions") },
                 onResetPin = {
                     vm.clearParentPin()
                     navController.navigate("onboarding") { popUpTo("settings") { inclusive = true } }

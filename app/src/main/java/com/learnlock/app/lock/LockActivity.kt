@@ -48,13 +48,14 @@ class LockActivity : ComponentActivity() {
         )
 
         val forcePreview = intent.getBooleanExtra(EXTRA_FORCE_PREVIEW, false)
+        val unlimitedMode = intent.getBooleanExtra(EXTRA_UNLIMITED_MODE, false)
         val app = application as LearnLockApp
         setContent {
             LearnLockTheme {
                 val vm: LockViewModel = viewModel(
                     factory = LockViewModelFactory(app, app.container.repository)
                 )
-                LaunchedEffect(forcePreview) { vm.load(forcePreview = forcePreview) }
+                LaunchedEffect(forcePreview, unlimitedMode) { vm.load(forcePreview = forcePreview, unlimitedMode = unlimitedMode) }
                 LockTaskScreen(
                     state = vm.uiState,
                     onAnswer = { vm.submitAnswer(it) },
@@ -72,5 +73,6 @@ class LockActivity : ComponentActivity() {
     companion object {
         /** Extra: показать задачу для проверки UI даже при активной сессии. */
         const val EXTRA_FORCE_PREVIEW = "force_preview"
+        const val EXTRA_UNLIMITED_MODE = "unlimited_mode"
     }
 }

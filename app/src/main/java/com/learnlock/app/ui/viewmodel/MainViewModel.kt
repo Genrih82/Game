@@ -106,8 +106,8 @@ class MainViewModel(
     }
 
     /** Открывает LockActivity в режиме проверки UI. */
-    fun previewLock() {
-        LockController.presentLock(getApplication(), forcePreview = true)
+    fun previewLock(unlimitedMode: Boolean = false) {
+        LockController.presentLock(getApplication(), forcePreview = true, unlimitedMode = unlimitedMode)
     }
 
     fun endSession() {

@@ -17,6 +17,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Foreground-сервис мониторинга.
@@ -49,6 +53,7 @@ class LockMonitorService : Service() {
         monitorScope.launch {
             while (true) {
                 delay(15_000)
+                updateScheduleNotification()
                 LockController.onScheduledCheck(this@LockMonitorService)
             }
         }
@@ -66,7 +71,19 @@ class LockMonitorService : Service() {
         super.onDestroy()
     }
 
-    private fun buildNotification(): Notification {
+    private suspend fun updateScheduleNotification() {
+        val app = application as? LearnLockApp ?: return
+        val session = app.container.repository.observeSession().first()
+        val nextText = if (session.nextLaunchAtMillis > 0L) {
+            SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(session.nextLaunchAtMillis))
+        } else "не запланировано"
+        getSystemService(android.app.NotificationManager::class.java).notify(
+            NOTIFICATION_ID,
+            buildNotification("Следующее задание: $nextText")
+        )
+    }
+
+    private fun buildNotification(text: String = getString(R.string.lock_notification_text)): Notification {
         val contentIntent = PendingIntent.getActivity(
             this,
             0,
@@ -75,7 +92,7 @@ class LockMonitorService : Service() {
         )
         return NotificationCompat.Builder(this, LearnLockApp.LOCK_CHANNEL_ID)
             .setContentTitle(getString(R.string.lock_notification_title))
-            .setContentText(getString(R.string.lock_notification_text))
+            .setContentText(text)
             .setSmallIcon(R.drawable.ic_launcher)
             .setContentIntent(contentIntent)
             .setOngoing(true)
