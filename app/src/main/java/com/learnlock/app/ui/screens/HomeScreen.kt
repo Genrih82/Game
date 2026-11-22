@@ -141,9 +141,8 @@ fun HomeScreen(
                     LlPrimaryButton("Начать настройку", onClick = onOpenOnboarding, coral = true)
                 }
 
-                LlGhostButton("Показать экран задачи", onClick = onPreviewLock)
+                LlGhostButton("Задания по желанию", onClick = onPreviewLock)
                 LlGhostButton("Статистика за 7 дней", onClick = onOpenStats)
-                LlGhostButton("Права Android", onClick = onOpenPermissions)
 
                 Spacer(Modifier.height(8.dp))
                 Text(
