@@ -73,8 +73,14 @@ class MainViewModel(
 
     fun setPin(pin: String) {
         viewModelScope.launch {
-            repository.setParentPin(pin)
-            uiState = uiState.copy(hasParentPin = true)
+            // Пустой PIN означает явное отключение родительской защиты.
+            if (pin.isBlank()) {
+                repository.clearParentPin()
+                uiState = uiState.copy(hasParentPin = false)
+            } else {
+                repository.setParentPin(pin)
+                uiState = uiState.copy(hasParentPin = true)
+            }
         }
     }
 
@@ -127,7 +133,7 @@ class MainViewModel(
     }
 
     fun openTasksIfReady() {
-        if (tasksOpened || !uiState.hasParentPin) return
+        if (tasksOpened) return
         tasksOpened = true
         viewModelScope.launch {
             val scheduled = repository.shouldPresentLock()

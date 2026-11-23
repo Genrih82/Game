@@ -26,12 +26,15 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
@@ -46,6 +49,7 @@ import com.learnlock.app.ui.components.LlGhostButton
 import com.learnlock.app.ui.components.LlPanel
 import com.learnlock.app.ui.components.LlPrimaryButton
 import com.learnlock.app.ui.theme.LlColors
+import kotlinx.coroutines.launch
 
 /**
  * Редактирование профиля ребёнка: имя, фон, предметы и выключатель блокировки.
@@ -59,6 +63,7 @@ fun SettingsScreen(
     onSave: (ChildProfileEntity) -> Unit,
     onChangePin: () -> Unit = {},
     onResetPin: () -> Unit = {},
+    onOpenPermissions: () -> Unit = {},
     onBack: () -> Unit
 ) {
     var draft by remember(profile) {
@@ -68,6 +73,8 @@ fun SettingsScreen(
     var nameFocused by remember { mutableStateOf(false) }
     var nameErrorShown by remember { mutableStateOf(false) }
     var resetDialogVisible by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
     val backgroundChipColors = FilterChipDefaults.filterChipColors(
         selectedContainerColor = LlColors.MintDeep,
         selectedLabelColor = LlColors.TextOnAccent,
@@ -90,7 +97,7 @@ fun SettingsScreen(
                 .statusBarsPadding()
                 .navigationBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 12.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text("Настройки", style = MaterialTheme.typography.displayMedium, color = LlColors.MintDeep)
@@ -99,7 +106,9 @@ fun SettingsScreen(
                 OutlinedTextField(
                     value = draft.displayName,
                     onValueChange = { value ->
-                        val capitalized = value.replaceFirstChar { first ->
+                        // В имени разрешены только буквы и пробелы.
+                        val lettersAndSpaces = value.filter { it.isLetter() || it == ' ' }
+                        val capitalized = lettersAndSpaces.replaceFirstChar { first ->
                             if (first.isLowerCase()) first.titlecase() else first.toString()
                         }
                         draft = draft.copy(displayName = capitalized.take(24))
@@ -131,32 +140,16 @@ fun SettingsScreen(
                         errorBorderColor = LlColors.Coral
                     )
                 )
-                if (!nameValid) {
-                    Text("Введите имя минимум из двух символов", color = LlColors.TextSecondary, style = MaterialTheme.typography.bodySmall)
+                if (nameErrorShown && !nameValid) {
+                    Text(
+                        "Необходимо ввести имя ребёнка (минимум 2 символа)",
+                        color = LlColors.Coral,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
 
-                Text("Возраст", style = MaterialTheme.typography.titleMedium)
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    (5..14).forEach { age ->
-                        FilterChip(
-                            selected = draft.ageYears == age,
-                            onClick = { draft = draft.copy(ageYears = age) },
-                            label = { Text("$age") },
-                            colors = backgroundChipColors
-                        )
-                    }
-                }
-
-                Text("Заданий для разблокировки", style = MaterialTheme.typography.titleMedium)
-                IntStepper(
-                    value = draft.tasksToUnlock,
-                    range = 1..20,
-                    onChange = { draft = draft.copy(tasksToUnlock = it) }
-                )
+                Text("Возраст: ${draft.ageYears} лет", style = MaterialTheme.typography.titleMedium)
+                Slider(value = draft.ageYears.toFloat(), onValueChange = { draft = draft.copy(ageYears = it.toInt().coerceIn(5, 18)) }, valueRange = 5f..18f, steps = 12, colors = SliderDefaults.colors(thumbColor = LlColors.MintDeep, activeTrackColor = LlColors.Mint))
 
                 Text("Цвет фона", style = MaterialTheme.typography.titleMedium)
                 FlowRow(
@@ -210,11 +203,11 @@ fun SettingsScreen(
                     )
                 }
                 if (draft.lockEnabled) {
-                    Text(
-                        "Каждые ${draft.launchIntervalMinutes} мин. Для разблокировки нужно верно решить ${draft.tasksToUnlock} заданий.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = LlColors.TextSecondary
-                    )
+                    Text("Количество заданий: ${draft.tasksToUnlock}", style = MaterialTheme.typography.titleMedium)
+                    Slider(value = draft.tasksToUnlock.toFloat(), onValueChange = { draft = draft.copy(tasksToUnlock = it.toInt().coerceIn(1, 20)) }, valueRange = 1f..20f, steps = 18, colors = SliderDefaults.colors(thumbColor = LlColors.MintDeep, activeTrackColor = LlColors.Mint))
+                    Text("Время запуска: каждые ${draft.launchIntervalMinutes} мин", style = MaterialTheme.typography.titleMedium)
+                    Slider(value = draft.launchIntervalMinutes.toFloat(), onValueChange = { draft = draft.copy(launchIntervalMinutes = it.toInt().coerceIn(5, 60)) }, valueRange = 5f..60f, steps = 10, colors = SliderDefaults.colors(thumbColor = LlColors.MintDeep, activeTrackColor = LlColors.Mint))
+                    LlGhostButton("Права Android", onClick = onOpenPermissions)
                     if (nextLaunchAtMillis > 0L) {
                         Text(
                             "Следующий запуск: ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(nextLaunchAtMillis))}",
@@ -224,7 +217,20 @@ fun SettingsScreen(
                 }
             }
 
-            LlPrimaryButton("Сохранить", onClick = { onSave(draft.copy(displayName = draft.displayName.trim())) }, enabled = nameValid, coral = true, elevated = true)
+            // Кнопка остаётся доступной: при пустом имени показываем ошибку и возвращаемся к полю.
+            LlPrimaryButton(
+                "Сохранить",
+                onClick = {
+                    if (nameValid) {
+                        onSave(draft.copy(displayName = draft.displayName.trim()))
+                    } else {
+                        nameErrorShown = true
+                        scope.launch { scrollState.animateScrollTo(0) }
+                    }
+                },
+                coral = true,
+                elevated = true
+            )
             LlGhostButton("Изменить PIN", onClick = onChangePin)
             LlGhostButton("Сбросить PIN", onClick = { resetDialogVisible = true }, contentColor = LlColors.TextSecondary)
             LlGhostButton("Назад", onClick = onBack, contentColor = LlColors.TextSecondary, elevated = true)

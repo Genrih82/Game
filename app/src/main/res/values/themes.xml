@@ -7,9 +7,9 @@
         <item name="android:windowLightStatusBar">true</item>
     </style>
     <style name="Theme.LearnLock.Lock" parent="Theme.LearnLock">
-        <item name="android:windowFullscreen">true</item>
         <item name="android:windowShowWallpaper">false</item>
         <item name="android:windowBackground">#121A24</item>
+        <item name="android:statusBarColor">#121A24</item>
         <item name="android:navigationBarColor">#121A24</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>

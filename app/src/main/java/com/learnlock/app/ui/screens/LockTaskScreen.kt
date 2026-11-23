@@ -14,15 +14,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.shadow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.outlined.PriorityHigh
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -64,7 +69,8 @@ fun LockTaskScreen(
     onDismissIfUnlocked: () -> Unit,
     onToggleParentPin: (Boolean) -> Unit = {},
     onOpenSettings: () -> Unit = {},
-    onOpenHelp: () -> Unit = {}
+    onOpenHelp: () -> Unit = {},
+    onOpenStats: () -> Unit = {}
 ) {
     LaunchedEffect(state.unlocked) {
         if (state.unlocked) {
@@ -105,13 +111,29 @@ fun LockTaskScreen(
                 IconButton(onClick = onOpenSettings) {
                     Icon(Icons.Outlined.Settings, contentDescription = "Настройки", tint = LlColors.Mist)
                 }
+                IconButton(
+                    // Статистика доступна прямо из задания и оформлена так же, как системные кнопки.
+                    onClick = onOpenStats,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .shadow(6.dp, CircleShape),
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = LlColors.SurfaceElevated,
+                        contentColor = LlColors.MintDeep
+                    )
+                ) {
+                    Icon(
+                        Icons.Outlined.PriorityHigh,
+                        contentDescription = "Статистика",
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
                 IconButton(onClick = onOpenHelp) {
                     Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Справка", tint = LlColors.Mist)
                 }
             }
             LlBrandMark(
-                light = true,
-                subtitle = "Реши задачу — и телефон снова твой"
+                light = true
             )
             Text(
                 if (state.unlimited) {
@@ -268,22 +290,33 @@ fun LockTaskScreen(
                     textAlign = TextAlign.Center
                 )
             }
-            LlGhostButton(
-                text = if (state.showParentPin) "Скрыть PIN родителя" else "Родительский PIN",
-                onClick = { onToggleParentPin(!state.showParentPin) }
-            )
-            if (state.showParentPin) {
-                LlPanel {
-                    LlPinField(
-                        value = parentPin,
-                        onValueChange = { parentPin = it },
-                        label = "PIN родителя"
-                    )
-                    LlPrimaryButton(
-                        text = "Разблокировать",
-                        onClick = { onParentUnlock(parentPin) },
-                        enabled = parentPin.length >= 4
-                    )
+            if (state.profile.lockEnabled && !state.unlimited) {
+                Text(
+                    "Родительский PIN всегда может отменить задание по расписанию.",
+                    color = LlColors.MistDeep,
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center
+                )
+            }
+            if (state.profile.lockEnabled) {
+                // PIN нужен только в режиме блокировки телефона.
+                LlGhostButton(
+                    text = if (state.showParentPin) "Скрыть PIN родителя" else "Родительский PIN",
+                    onClick = { onToggleParentPin(!state.showParentPin) }
+                )
+                if (state.showParentPin) {
+                    LlPanel {
+                        LlPinField(
+                            value = parentPin,
+                            onValueChange = { parentPin = it },
+                            label = "PIN родителя"
+                        )
+                        LlPrimaryButton(
+                            text = "Разблокировать",
+                            onClick = { onParentUnlock(parentPin) },
+                            enabled = parentPin.length >= 4
+                        )
+                    }
                 }
             }
         }

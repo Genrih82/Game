@@ -25,11 +25,13 @@ import com.learnlock.app.ui.theme.LlColors
 fun ParentPinSetupScreen(
     backgroundColor: Int = 0,
     onSave: (String) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    allowEmpty: Boolean = false
 ) {
     var pin by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
-    val valid = pin.length in 4..12 && pin == confirm && pin.all { it.isDigit() }
+    val valid = (allowEmpty && pin.isEmpty() && confirm.isEmpty()) ||
+        (pin.length in 4..12 && pin == confirm && pin.all { it.isDigit() })
 
     LlBackground(backgroundColor = backgroundColor) {
         Column(
@@ -45,7 +47,7 @@ fun ParentPinSetupScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = LlColors.TextSecondary
             )
-            LlPinField(value = pin, onValueChange = { pin = it }, label = "PIN (4–12 цифр)")
+            LlPinField(value = pin, onValueChange = { pin = it }, label = if (allowEmpty) "PIN (можно оставить пустым)" else "PIN (4–12 цифр)")
             LlPinField(value = confirm, onValueChange = { confirm = it }, label = "Повтор PIN")
             LlPrimaryButton("Сохранить", onClick = { onSave(pin) }, enabled = valid, coral = true)
             LlGhostButton("Назад", onClick = onBack)

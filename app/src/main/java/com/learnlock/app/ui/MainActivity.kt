@@ -1,28 +1,33 @@
 package com.learnlock.app.ui
 
+import android.app.Activity
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.learnlock.app.LearnLockApp
-import com.learnlock.app.ui.screens.HomeScreen
 import com.learnlock.app.ui.screens.HelpScreen
 import com.learnlock.app.ui.screens.OnboardingScreen
 import com.learnlock.app.ui.screens.ParentPinSetupScreen
@@ -41,11 +46,17 @@ import com.learnlock.app.ui.viewmodel.MainViewModelFactory
  */
 class MainActivity : ComponentActivity() {
     private val openRoute = androidx.compose.runtime.mutableStateOf<String?>(null)
+    private val launchGeneration = mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         openRoute.value = intent.getStringExtra(EXTRA_OPEN)
-        enableEdgeToEdge()
+        WindowCompat.setDecorFitsSystemWindows(window, true)
+        window.statusBarColor = android.graphics.Color.rgb(38, 50, 56)
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            show(WindowInsetsCompat.Type.statusBars())
+        }
         val app = application as LearnLockApp
         setContent {
             LearnLockTheme {
@@ -56,6 +67,7 @@ class MainActivity : ComponentActivity() {
                     LearnLockNav(
                         app = app,
                         openRoute = openRoute.value,
+                        launchGeneration = launchGeneration.intValue,
                         onOpenRouteConsumed = { openRoute.value = null }
                     )
                 }
@@ -72,12 +84,14 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         openRoute.value = intent.getStringExtra(EXTRA_OPEN)
+        launchGeneration.intValue += 1
     }
 
     companion object {
         const val EXTRA_OPEN = "open_route"
         const val OPEN_SETTINGS = "settings"
         const val OPEN_HELP = "help"
+        const val OPEN_STATS = "stats"
     }
 }
 
@@ -86,9 +100,26 @@ class MainActivity : ComponentActivity() {
 private fun LearnLockNav(
     app: LearnLockApp,
     openRoute: String?,
+    launchGeneration: Int,
     onOpenRouteConsumed: () -> Unit
 ) {
     val navController = rememberNavController()
+    val hostActivity = LocalContext.current as? Activity
+    val returnToTask: () -> Unit = {
+        // MainActivity открывается поверх LockActivity; закрытие возвращает к текущему заданию.
+        if (hostActivity != null) {
+            hostActivity.finish()
+        } else {
+            navController.popBackStack()
+        }
+    }
+    val currentRoute by navController.currentBackStackEntryAsState()
+    val route = currentRoute?.destination?.route
+    BackHandler(
+        enabled = route in setOf("settings", "settings_pin", "help", "stats")
+    ) {
+        returnToTask()
+    }
     val vm: MainViewModel = viewModel(
         factory = MainViewModelFactory(app, app.container.repository)
     )
@@ -97,8 +128,9 @@ private fun LearnLockNav(
         vm.bootstrap()
     }
 
-    LaunchedEffect(vm.uiState.bootstrapped, openRoute) {
+    LaunchedEffect(vm.uiState.bootstrapped, openRoute, launchGeneration) {
         if (!vm.uiState.bootstrapped) return@LaunchedEffect
+        // Маршруты из экрана задания временно подавляют автозапуск новой задачи.
         when (openRoute) {
             MainActivity.OPEN_SETTINGS -> {
                 vm.suppressAutoTasks()
@@ -110,31 +142,30 @@ private fun LearnLockNav(
                 navController.navigate("help")
                 onOpenRouteConsumed()
             }
-            else -> vm.openTasksIfReady()
+            MainActivity.OPEN_STATS -> {
+                vm.suppressAutoTasks()
+                navController.navigate("stats")
+                onOpenRouteConsumed()
+            }
+            else -> if (vm.uiState.profile.displayName == "Ребёнок") {
+                navController.navigate("onboarding")
+            } else {
+                vm.openTasksIfReady()
+            }
         }
     }
 
-    NavHost(navController = navController, startDestination = "home") {
-        composable("home") {
-            HomeScreen(
-                state = vm.uiState,
-                onOpenOnboarding = { navController.navigate("onboarding") },
-                onOpenSettings = {
-                    if (vm.uiState.hasParentPin) navController.navigate("settings_pin") else navController.navigate("settings")
-                },
-                onOpenStats = { navController.navigate("stats") },
-                onOpenHelp = { navController.navigate("help") },
-                onOpenPermissions = { navController.navigate("permissions") },
-                onPreviewLock = { vm.previewLock() }
-            )
-        }
+    NavHost(navController = navController, startDestination = "launch") {
+        // Технический маршрут: приложение сразу переводит пользователя
+        // в онбординг, настройки или экран заданий.
+        composable("launch") { }
         composable("onboarding") {
             OnboardingScreen(
-                hasPin = vm.uiState.hasParentPin,
                 backgroundColor = vm.uiState.profile.backgroundColor,
-                onContinueToPin = { navController.navigate("pin_setup") },
-                onContinueToPermissions = { navController.navigate("permissions") },
-                onDone = { navController.popBackStack() }
+                onContinueToSettings = { pin ->
+                    if (pin.isNotBlank()) vm.setPin(pin)
+                    navController.navigate("settings") { popUpTo("onboarding") { inclusive = true } }
+                }
             )
         }
         composable("pin_setup") {
@@ -146,7 +177,7 @@ private fun LearnLockNav(
                         popUpTo("onboarding")
                     }
                 },
-                onBack = { navController.popBackStack() }
+                onBack = returnToTask
             )
         }
         composable("change_pin") {
@@ -158,7 +189,8 @@ private fun LearnLockNav(
                         popUpTo("change_pin") { inclusive = true }
                     }
                 },
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                allowEmpty = true
             )
         }
         composable("permissions") {
@@ -191,7 +223,7 @@ private fun LearnLockNav(
                         }
                     }
                 },
-                onBack = { navController.popBackStack() }
+                onBack = returnToTask
             )
         }
         composable("settings") {
@@ -199,28 +231,29 @@ private fun LearnLockNav(
                 profile = vm.uiState.profile,
                 nextLaunchAtMillis = vm.uiState.session.nextLaunchAtMillis,
                 onChangePin = { navController.navigate("change_pin") },
+                onOpenPermissions = { navController.navigate("permissions") },
                 onResetPin = {
                     vm.clearParentPin()
-                    navController.navigate("onboarding") { popUpTo("settings") { inclusive = true } }
+                    navController.navigate("change_pin") { popUpTo("settings") { inclusive = true } }
                 },
                 onSave = { profile ->
                     vm.saveProfile(profile)
-                    navController.popBackStack()
+                    vm.previewLock()
                 },
-                onBack = { navController.popBackStack() }
+                onBack = returnToTask
             )
         }
         composable("stats") {
             StatsScreen(
                 attempts = vm.uiState.attempts,
                 backgroundColor = vm.uiState.profile.backgroundColor,
-                onBack = { navController.popBackStack() }
+                onBack = returnToTask
             )
         }
         composable("help") {
             HelpScreen(
                 backgroundColor = vm.uiState.profile.backgroundColor,
-                onBack = { navController.popBackStack() }
+                onBack = returnToTask
             )
         }
     }
