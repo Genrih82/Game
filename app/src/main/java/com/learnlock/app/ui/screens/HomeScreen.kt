@@ -6,7 +6,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,9 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.dp
 import com.learnlock.app.ui.components.LlBackground
-import com.learnlock.app.ui.components.LlGhostButton
 import com.learnlock.app.ui.components.LlPanel
-import com.learnlock.app.ui.components.LlPrimaryButton
 import com.learnlock.app.ui.theme.LlColors
 import com.learnlock.app.ui.viewmodel.MainUiState
 import java.text.SimpleDateFormat
@@ -49,14 +46,9 @@ import java.util.Locale
 @Composable
 fun HomeScreen(
     state: MainUiState,
-    onOpenOnboarding: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenStats: () -> Unit,
-    onOpenHelp: () -> Unit,
-    onOpenPermissions: () -> Unit,
-    onPreviewLock: () -> Unit
+    onOpenHelp: () -> Unit
 ) {
-    val firstLaunch = !state.hasParentPin
     val untilText = if (state.session.nextLaunchAtMillis > 0L) {
         SimpleDateFormat("HH:mm", Locale.getDefault())
             .format(Date(state.session.nextLaunchAtMillis))
@@ -125,7 +117,7 @@ fun HomeScreen(
                     color = LlColors.TextSecondary
                 )
 
-                if (state.profile.lockEnabled && !firstLaunch) {
+                if (state.profile.lockEnabled) {
                     LlPanel {
                         Text("Блокировка включена", style = MaterialTheme.typography.titleMedium)
                         Text("Запуск в: $untilText", style = MaterialTheme.typography.bodyMedium)
@@ -137,14 +129,6 @@ fun HomeScreen(
                     }
                 }
 
-                if (!state.hasParentPin) {
-                    LlPrimaryButton("Начать настройку", onClick = onOpenOnboarding, coral = true)
-                }
-
-                LlGhostButton("Задания по желанию", onClick = onPreviewLock)
-                LlGhostButton("Статистика за 7 дней", onClick = onOpenStats)
-
-                Spacer(Modifier.height(8.dp))
                 Text(
                     "Родительский PIN всегда может снять блокировку.",
                     style = MaterialTheme.typography.bodySmall,

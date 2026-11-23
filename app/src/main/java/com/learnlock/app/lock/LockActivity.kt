@@ -6,7 +6,8 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -46,7 +47,8 @@ class LockActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        WindowCompat.getInsetsController(window, window.decorView)
+            .show(WindowInsetsCompat.Type.statusBars())
         window.addFlags(
             WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
                 WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
@@ -86,7 +88,8 @@ class LockActivity : ComponentActivity() {
                     },
                     onToggleParentPin = { vm.toggleParentPin(it) },
                     onOpenSettings = { openAppScreen(MainActivity.OPEN_SETTINGS) },
-                    onOpenHelp = { openAppScreen(MainActivity.OPEN_HELP) }
+                    onOpenHelp = { openAppScreen(MainActivity.OPEN_HELP) },
+                    onOpenStats = { openAppScreen(MainActivity.OPEN_STATS) }
                 )
             }
         }

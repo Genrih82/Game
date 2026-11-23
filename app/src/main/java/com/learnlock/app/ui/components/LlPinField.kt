@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import com.learnlock.app.ui.theme.LlColors
 
@@ -29,7 +30,12 @@ import com.learnlock.app.ui.theme.LlColors
  * Поле PIN: светлый контейнер, тёмный текст; кнопка «глаз» показывает цифры.
  */
 @Composable
-internal fun LlPinField(value: String, onValueChange: (String) -> Unit, label: String) {
+internal fun LlPinField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    labelStyle: TextStyle = MaterialTheme.typography.bodySmall
+) {
     val ink = LlColors.Ink
     val fill = LlColors.SurfaceElevated
     var visible by remember { mutableStateOf(false) }
@@ -38,7 +44,7 @@ internal fun LlPinField(value: String, onValueChange: (String) -> Unit, label: S
         onValueChange = { next ->
             if (next.length <= 12 && next.all(Char::isDigit)) onValueChange(next)
         },
-        label = { Text(label, color = LlColors.TextSecondary) },
+        label = { Text(label, style = labelStyle, color = LlColors.TextSecondary) },
         singleLine = true,
         visualTransformation = if (visible) {
             VisualTransformation.None
