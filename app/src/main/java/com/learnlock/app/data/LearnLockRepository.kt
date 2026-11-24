@@ -25,6 +25,8 @@ class LearnLockRepository(
     fun observeProfile(): Flow<ChildProfileEntity?> = profileDao.observeProfile()
     fun observeSession(): Flow<SessionState> = sessionStore.state
 
+    fun observeAttemptTotals(): Flow<AttemptTotals> = statsDao.observeTotals()
+
     /** Попытки за последние [days] дней (экран статистики). */
     fun observeStats(days: Int): Flow<List<TaskAttemptEntity>> {
         val from = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(days.toLong())

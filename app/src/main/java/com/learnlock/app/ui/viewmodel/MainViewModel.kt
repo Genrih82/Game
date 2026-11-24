@@ -12,6 +12,7 @@ import com.learnlock.app.data.ChildProfileEntity
 import com.learnlock.app.data.LearnLockRepository
 import com.learnlock.app.data.SessionState
 import com.learnlock.app.data.TaskAttemptEntity
+import com.learnlock.app.data.AttemptTotals
 import com.learnlock.app.data.ParentPinVerification
 import com.learnlock.app.lock.LockController
 import kotlinx.coroutines.flow.collectLatest
@@ -23,6 +24,7 @@ data class MainUiState(
     val session: SessionState = SessionState(),
     val hasParentPin: Boolean = false,
     val attempts: List<TaskAttemptEntity> = emptyList(),
+    val attemptTotals: AttemptTotals = AttemptTotals(),
     val bootstrapped: Boolean = false,
     /** true после чтения строки профиля из Room, до этого сохранять профиль нельзя. */
     val profileLoaded: Boolean = false
@@ -66,6 +68,11 @@ class MainViewModel(
             launch {
                 repository.observeStats(7).collectLatest { attempts ->
                     uiState = uiState.copy(attempts = attempts)
+                }
+            }
+            launch {
+                repository.observeAttemptTotals().collectLatest { totals ->
+                    uiState = uiState.copy(attemptTotals = totals)
                 }
             }
         }

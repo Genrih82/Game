@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -127,7 +128,8 @@ fun LlPrimaryButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     coral: Boolean = false,
-    elevated: Boolean = true
+    elevated: Boolean = true,
+    textStyle: TextStyle = MaterialTheme.typography.labelLarge
 ) {
     Button(
         onClick = onClick,
@@ -152,7 +154,7 @@ fun LlPrimaryButton(
         ),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)
     ) {
-        Text(text, style = MaterialTheme.typography.labelLarge)
+        Text(text, style = textStyle, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }
 

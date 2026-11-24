@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.learnlock.app.data.TaskAttemptEntity
+import com.learnlock.app.data.AttemptTotals
 import com.learnlock.app.ui.components.LlBackground
 import com.learnlock.app.ui.components.LlGhostButton
 import com.learnlock.app.ui.components.LlPanel
@@ -30,17 +31,14 @@ import java.util.Locale
 @Composable
 fun StatsScreen(
     attempts: List<TaskAttemptEntity>,
+    totals: AttemptTotals = AttemptTotals(),
     backgroundColor: Int = 0,
     onBack: () -> Unit
 ) {
     val learning = attempts.filter { !it.usedParentUnlock }
-    val solved = learning.count { it.correct }
-    val parentUnlocks = attempts.count { it.usedParentUnlock }
-    val accuracy = if (learning.isNotEmpty()) {
-        solved.toDouble() / learning.size
-    } else {
-        0.0
-    }
+    val subjectAccuracy = learning.groupBy { it.category }
+        .toList()
+        .sortedBy { it.first }
     val weakTopics = weakTopicsFromAttempts(learning).take(3)
     val formatter = SimpleDateFormat("dd.MM HH:mm", Locale.getDefault())
 
@@ -55,13 +53,23 @@ fun StatsScreen(
             Text("Статистика", style = MaterialTheme.typography.displayMedium, color = LlColors.MintDeep)
 
             LlPanel {
-                Text("Решено: $solved", style = MaterialTheme.typography.titleLarge)
-                Text("PIN родителя: $parentUnlocks", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    "Точность: ${"%.0f".format(accuracy * 100)}%",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = LlColors.MintDeep
-                )
+                Text("Верных ответов: ${totals.correct}", style = MaterialTheme.typography.titleLarge, color = LlColors.MintDeep)
+                Text("Неверных ответов: ${totals.incorrect}", style = MaterialTheme.typography.titleLarge, color = LlColors.Coral)
+                Text("Всего примеров: ${totals.correct + totals.incorrect}", style = MaterialTheme.typography.titleLarge)
+            }
+
+            if (subjectAccuracy.isNotEmpty()) {
+                LlPanel {
+                    Text("Точность по предметам", style = MaterialTheme.typography.titleLarge)
+                    subjectAccuracy.forEach { (category, subjectAttempts) ->
+                        val correct = subjectAttempts.count { it.correct }
+                        val accuracy = correct.toDouble() / subjectAttempts.size
+                        Text(
+                            "${categoryDisplayName(category)}: ${"%.0f".format(accuracy * 100)}% ($correct из ${subjectAttempts.size})",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                }
             }
 
             if (weakTopics.isNotEmpty()) {
@@ -112,6 +120,14 @@ fun StatsScreen(
             LlGhostButton("Назад", onClick = onBack)
         }
     }
+}
+
+private fun categoryDisplayName(category: String): String = when (category.uppercase()) {
+    "MATH", "МАТЕМАТИКА" -> "Математика"
+    "RUSSIAN", "РУССКИЙ" -> "Русский язык"
+    "READING", "ЧТЕНИЕ" -> "Чтение"
+    "LOGIC", "ЛОГИКА" -> "Логика"
+    else -> category
 }
 
 private fun weakTopicsFromAttempts(

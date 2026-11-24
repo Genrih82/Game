@@ -174,7 +174,7 @@ fun PermissionsScreen(backgroundColor: Int = 0, onBack: () -> Unit, onContinue: 
         ).filter { it.applicable }
     }
 
-    var stepIndex by remember { mutableIntStateOf(0) }
+    var stepIndex by remember { mutableIntStateOf(firstMissingPermissionIndex(context)) }
     if (stepIndex >= steps.size) stepIndex = steps.lastIndex.coerceAtLeast(0)
     val step = steps.getOrNull(stepIndex)
     val allOk = steps.all { it.isGranted() }
@@ -207,6 +207,13 @@ fun PermissionsScreen(backgroundColor: Int = 0, onBack: () -> Unit, onContinue: 
                 LlPanel {
                     Text(step.title, style = MaterialTheme.typography.titleLarge, color = LlColors.MintDeep)
                     Text(step.body, style = MaterialTheme.typography.bodyLarge)
+                    if (step.title == "Специальные возможности") {
+                        Text(
+                            "Если Android пишет, что приложение заблокировано из соображений безопасности: откройте Настройки → Приложения → LearnLock → меню ⋮ → Разрешить ограниченные настройки. Затем вернитесь сюда и включите службу.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LlColors.TextSecondary
+                        )
+                    }
                     Text(
                         "Статус: ${status(step.isGranted())}",
                         style = MaterialTheme.typography.titleMedium,
@@ -224,7 +231,8 @@ fun PermissionsScreen(backgroundColor: Int = 0, onBack: () -> Unit, onContinue: 
                             }
                         },
                         enabled = !step.isGranted(),
-                        coral = !step.isGranted()
+                        coral = !step.isGranted(),
+                        textStyle = MaterialTheme.typography.labelSmall
                     )
                     if (step.isGranted()) {
                         Text("Готово для этого шага.", color = LlColors.Success)
@@ -303,4 +311,26 @@ private fun notificationsAllowed(context: Context): Boolean {
 private fun canUseFullScreenIntent(context: Context): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return true
     return context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
+}
+
+/** Все разрешения, необходимые для автоматического запуска заданий. */
+fun allRequiredPermissionsGranted(context: Context): Boolean =
+    LockController.canDrawOverlays(context) &&
+        isAccessibilityEnabled(context) &&
+        isIgnoringBattery(context) &&
+        canScheduleExactAlarms(context) &&
+        notificationsAllowed(context) &&
+        canUseFullScreenIntent(context)
+
+/** Индекс первого шага, который ещё не выполнен. */
+private fun firstMissingPermissionIndex(context: Context): Int {
+    val granted = listOf(
+        LockController.canDrawOverlays(context),
+        isAccessibilityEnabled(context),
+        isIgnoringBattery(context),
+        canScheduleExactAlarms(context),
+        notificationsAllowed(context),
+        canUseFullScreenIntent(context)
+    )
+    return granted.indexOfFirst { !it }.takeIf { it >= 0 } ?: 0
 }

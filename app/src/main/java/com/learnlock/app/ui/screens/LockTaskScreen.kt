@@ -115,7 +115,7 @@ fun LockTaskScreen(
                     // Статистика доступна прямо из задания и оформлена так же, как системные кнопки.
                     onClick = onOpenStats,
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(26.dp)
                         .shadow(6.dp, CircleShape),
                     colors = IconButtonDefaults.iconButtonColors(
                         containerColor = LlColors.SurfaceElevated,
@@ -125,7 +125,7 @@ fun LockTaskScreen(
                     Icon(
                         Icons.Outlined.PriorityHigh,
                         contentDescription = "Статистика",
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(14.dp)
                     )
                 }
                 IconButton(onClick = onOpenHelp) {

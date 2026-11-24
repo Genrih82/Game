@@ -178,6 +178,12 @@ object LockController {
         }
     }
 
+    /** Убирает уведомление о задании после разблокировки телефона. */
+    fun dismissLaunchNotification(context: Context) {
+        NotificationManagerCompat.from(context.applicationContext).cancel(1003)
+        launchNotificationShown.set(false)
+    }
+
     fun onLockActivityStarted() {
         lockVisible.set(true)
         lockInFront.set(true)

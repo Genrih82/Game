@@ -55,6 +55,17 @@ interface StatsDao {
     )
     fun observeSince(fromMillis: Long): Flow<List<TaskAttemptEntity>>
 
+    /** Общие накопленные итоги правильных и неправильных ответов. */
+    @Query(
+        """
+        SELECT
+            COALESCE(SUM(CASE WHEN correct = 1 AND usedParentUnlock = 0 THEN 1 ELSE 0 END), 0) AS correct,
+            COALESCE(SUM(CASE WHEN correct = 0 AND usedParentUnlock = 0 THEN 1 ELSE 0 END), 0) AS incorrect
+        FROM task_attempt
+        """
+    )
+    fun observeTotals(): Flow<AttemptTotals>
+
     /**
      * Средняя точность за период, без учёта parent-unlock.
      * @return null, если попыток ещё не было

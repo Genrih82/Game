@@ -19,7 +19,8 @@ import com.learnlock.app.ui.theme.LlColors
 @Composable
 fun HelpScreen(
     backgroundColor: Int = 0,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenFeedback: () -> Unit = {}
 ) {
     LlBackground(backgroundColor = backgroundColor) {
         Column(
@@ -40,6 +41,7 @@ fun HelpScreen(
                     color = LlColors.TextPrimary
                 )
             }
+            LlGhostButton("Обратная связь", onClick = onOpenFeedback)
             LlGhostButton("Назад", onClick = onBack)
         }
     }

@@ -30,6 +30,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -43,13 +44,19 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.LifecycleEventObserver
 import com.learnlock.app.data.ChildProfileEntity
 import com.learnlock.app.ui.components.LlBackground
 import com.learnlock.app.ui.components.LlGhostButton
 import com.learnlock.app.ui.components.LlPanel
 import com.learnlock.app.ui.components.LlPrimaryButton
+import com.learnlock.app.ui.screens.allRequiredPermissionsGranted
 import com.learnlock.app.ui.theme.LlColors
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /**
  * Редактирование профиля ребёнка: имя, фон, предметы и выключатель блокировки.
@@ -63,7 +70,7 @@ fun SettingsScreen(
     onSave: (ChildProfileEntity) -> Unit,
     onChangePin: () -> Unit = {},
     onResetPin: () -> Unit = {},
-    onOpenPermissions: () -> Unit = {},
+    onOpenPermissions: (ChildProfileEntity) -> Unit = {},
     onBack: () -> Unit
 ) {
     var draft by remember(profile) {
@@ -73,8 +80,21 @@ fun SettingsScreen(
     var nameFocused by remember { mutableStateOf(false) }
     var nameErrorShown by remember { mutableStateOf(false) }
     var resetDialogVisible by remember { mutableStateOf(false) }
+    var permissionDialogVisible by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var permissionsGranted by remember { mutableStateOf(allRequiredPermissionsGranted(context)) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                permissionsGranted = allRequiredPermissionsGranted(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val backgroundChipColors = FilterChipDefaults.filterChipColors(
         selectedContainerColor = LlColors.MintDeep,
         selectedLabelColor = LlColors.TextOnAccent,
@@ -179,7 +199,7 @@ fun SettingsScreen(
                         )
                     )
                 }
-                CategoryToggle("Чтение", draft.readingEnabled) { enabled ->
+                CategoryToggle("Русский", draft.readingEnabled) { enabled ->
                     draft = draft.copy(
                         readingEnabled = keepCategory(
                             enabled,
@@ -188,6 +208,7 @@ fun SettingsScreen(
                             draft.englishEnabled
                         )
                     )
+                }
                 }
                 CategoryToggle("Логика", draft.logicEnabled) { enabled ->
                     draft = draft.copy(
@@ -237,8 +258,27 @@ fun SettingsScreen(
                     Text("Количество заданий: ${draft.tasksToUnlock}", style = MaterialTheme.typography.titleMedium)
                     Slider(value = draft.tasksToUnlock.toFloat(), onValueChange = { draft = draft.copy(tasksToUnlock = it.toInt().coerceIn(1, 20)) }, valueRange = 1f..20f, steps = 18, colors = SliderDefaults.colors(thumbColor = LlColors.MintDeep, activeTrackColor = LlColors.Mint))
                     Text("Время запуска: каждые ${draft.launchIntervalMinutes} мин", style = MaterialTheme.typography.titleMedium)
-                    Slider(value = draft.launchIntervalMinutes.toFloat(), onValueChange = { draft = draft.copy(launchIntervalMinutes = it.toInt().coerceIn(5, 60)) }, valueRange = 5f..60f, steps = 10, colors = SliderDefaults.colors(thumbColor = LlColors.MintDeep, activeTrackColor = LlColors.Mint))
-                    LlGhostButton("Права Android", onClick = onOpenPermissions)
+                    Slider(
+                        value = draft.launchIntervalMinutes.toFloat(),
+                        onValueChange = {
+                            val snapped = (it / 5f).roundToInt() * 5
+                            draft = draft.copy(launchIntervalMinutes = snapped.coerceIn(5, 60))
+                        },
+                        valueRange = 5f..60f,
+                        steps = 10,
+                        colors = SliderDefaults.colors(thumbColor = LlColors.MintDeep, activeTrackColor = LlColors.Mint)
+                    )
+                    LlGhostButton(
+                        "Права Android",
+                        onClick = {
+                            if (nameValid) {
+                                onOpenPermissions(draft.copy(displayName = draft.displayName.trim()))
+                            } else {
+                                nameErrorShown = true
+                                scope.launch { scrollState.animateScrollTo(0) }
+                            }
+                        }
+                    )
                     if (nextLaunchAtMillis > 0L) {
                         Text(
                             "Следующий запуск: ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(nextLaunchAtMillis))}",
@@ -253,7 +293,12 @@ fun SettingsScreen(
                 "Сохранить",
                 onClick = {
                     if (nameValid) {
-                        onSave(draft.copy(displayName = draft.displayName.trim()))
+                        val saved = draft.copy(displayName = draft.displayName.trim())
+                        if (saved.lockEnabled && !permissionsGranted) {
+                            permissionDialogVisible = true
+                        } else {
+                            onSave(saved)
+                        }
                     } else {
                         nameErrorShown = true
                         scope.launch { scrollState.animateScrollTo(0) }
@@ -275,6 +320,25 @@ fun SettingsScreen(
                     },
                     dismissButton = {
                         TextButton(onClick = { resetDialogVisible = false }) { Text("Отмена") }
+                    }
+                )
+            }
+            if (permissionDialogVisible) {
+                AlertDialog(
+                    onDismissRequest = { permissionDialogVisible = false },
+                    title = { Text("Нужны разрешения Android") },
+                    text = { Text("Для автоматического запуска заданий необходимо включить все разрешения Android.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            permissionDialogVisible = false
+                            onOpenPermissions(draft.copy(displayName = draft.displayName.trim()))
+                        }) { Text("Продолжить") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            permissionDialogVisible = false
+                            onSave(draft.copy(displayName = draft.displayName.trim(), lockEnabled = false))
+                        }) { Text("Отмена") }
                     }
                 )
             }

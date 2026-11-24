@@ -84,7 +84,10 @@ class LockActivity : ComponentActivity() {
                     onUseHint = { vm.useHint() },
                     onParentUnlock = { pin -> vm.parentUnlock(pin) },
                     onDismissIfUnlocked = {
-                        if (vm.uiState.unlocked) finish()
+                        if (vm.uiState.unlocked) {
+                            LockController.dismissLaunchNotification(this@LockActivity)
+                            finish()
+                        }
                     },
                     onToggleParentPin = { vm.toggleParentPin(it) },
                     onOpenSettings = { openAppScreen(MainActivity.OPEN_SETTINGS) },

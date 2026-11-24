@@ -29,6 +29,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.learnlock.app.LearnLockApp
 import com.learnlock.app.ui.screens.HelpScreen
+import com.learnlock.app.ui.screens.FeedbackScreen
 import com.learnlock.app.ui.screens.OnboardingScreen
 import com.learnlock.app.ui.screens.ParentPinSetupScreen
 import com.learnlock.app.ui.screens.ParentPinUnlockScreen
@@ -231,7 +232,10 @@ private fun LearnLockNav(
                 profile = vm.uiState.profile,
                 nextLaunchAtMillis = vm.uiState.session.nextLaunchAtMillis,
                 onChangePin = { navController.navigate("change_pin") },
-                onOpenPermissions = { navController.navigate("permissions") },
+                onOpenPermissions = { profile ->
+                    vm.saveProfile(profile)
+                    navController.navigate("permissions")
+                },
                 onResetPin = {
                     vm.clearParentPin()
                     navController.navigate("change_pin") { popUpTo("settings") { inclusive = true } }
@@ -246,6 +250,7 @@ private fun LearnLockNav(
         composable("stats") {
             StatsScreen(
                 attempts = vm.uiState.attempts,
+                totals = vm.uiState.attemptTotals,
                 backgroundColor = vm.uiState.profile.backgroundColor,
                 onBack = returnToTask
             )
@@ -253,7 +258,14 @@ private fun LearnLockNav(
         composable("help") {
             HelpScreen(
                 backgroundColor = vm.uiState.profile.backgroundColor,
-                onBack = returnToTask
+                onBack = returnToTask,
+                onOpenFeedback = { navController.navigate("feedback") }
+            )
+        }
+        composable("feedback") {
+            FeedbackScreen(
+                backgroundColor = vm.uiState.profile.backgroundColor,
+                onBack = { navController.popBackStack() }
             )
         }
     }

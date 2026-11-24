@@ -70,6 +70,12 @@ data class TaskAttemptEntity(
     val skillTag: String = ""
 )
 
+/** Общие итоги учебных ответов без учёта разблокировок родительским PIN. */
+data class AttemptTotals(
+    val correct: Int = 0,
+    val incorrect: Int = 0
+)
+
 /**
  * Эфемерное состояние сессии (DataStore, не Room).
  * @property unlockedUntilMillis устаревший ключ DataStore, показ его не читает
