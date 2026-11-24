@@ -209,7 +209,6 @@ fun SettingsScreen(
                         )
                     )
                 }
-                }
                 CategoryToggle("Логика", draft.logicEnabled) { enabled ->
                     draft = draft.copy(
                         logicEnabled = keepCategory(
@@ -342,9 +341,9 @@ fun SettingsScreen(
                     }
                 )
             }
-            }
         }
     }
+}
 }
 
 private fun keepCategory(enabled: Boolean, vararg others: Boolean): Boolean {
