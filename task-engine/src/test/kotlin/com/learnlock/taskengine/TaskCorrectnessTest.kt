@@ -258,7 +258,16 @@ class TaskCorrectnessTest {
 
     private fun assertChoiceUniqueness(task: Task) {
         assertEquals(AnswerInputType.CHOICE, task.inputType, task.prompt)
-        assertTrue(task.choices.size >= 2, "мало вариантов: ${task.prompt}")
+        val minChoices = when (task.skillTag) {
+            SkillTag.LOGIC_SEQ, SkillTag.LOGIC_PATTERN, SkillTag.LOGIC_ANALOGY,
+            SkillTag.READ_LETTER, SkillTag.READ_ODD, SkillTag.READ_SYNONYM,
+            SkillTag.ENG_VOCAB, SkillTag.ENG_IRREGULAR, SkillTag.ENG_THREE_FORMS -> 4
+            else -> 2
+        }
+        assertTrue(
+            task.choices.size >= minChoices,
+            "мало вариантов (${task.choices.size} < $minChoices): ${task.prompt} / ${task.choices}"
+        )
         val labels = task.choices.map { Task.normalize(it.label) }
         assertEquals(labels.size, labels.distinct().size, "дубли вариантов: ${task.choices} / ${task.prompt}")
         val accepted = task.acceptedAnswers.map { Task.normalize(it) }

@@ -108,7 +108,8 @@ class MathTemplateGenerator {
             money = money,
             nameA = personA.nominative,
             nameB = personB.nominative,
-            level = level
+            level = level,
+            random = random
         )
     }
 
@@ -123,7 +124,8 @@ class MathTemplateGenerator {
         money: Int,
         nameA: String,
         nameB: String,
-        level: Int
+        level: Int,
+        random: Random
     ): Task {
         val lower = prompt.lowercase()
         return when (entry.skillTag) {
@@ -131,8 +133,8 @@ class MathTemplateGenerator {
             SkillTag.MATH_SUB -> numberTask(entry, prompt, a - b, level)
             SkillTag.MATH_MUL -> numberTask(entry, prompt, a * b, level)
             SkillTag.MATH_DIV -> numberTask(entry, prompt, a / b, level)
-            SkillTag.MATH_COMPARE -> compareTask(entry, prompt, lower, a, b, nameA, nameB, level)
-            SkillTag.MATH_MIX -> mixTask(entry, prompt, lower, a, b, c, price, money, level)
+            SkillTag.MATH_COMPARE -> compareTask(entry, prompt, lower, a, b, nameA, nameB, level, random)
+            SkillTag.MATH_MIX -> mixTask(entry, prompt, lower, a, b, c, price, money, level, random)
             else -> numberTask(entry, prompt, a + b, level)
         }
     }
@@ -149,7 +151,8 @@ class MathTemplateGenerator {
         b: Int,
         nameA: String,
         nameB: String,
-        level: Int
+        level: Int,
+        random: Random
     ): Task {
         if ("у кого" in lower) {
             val winner = when {
@@ -157,13 +160,12 @@ class MathTemplateGenerator {
                 a < b -> nameB
                 else -> nameA
             }
-            val options = listOf(nameA, nameB).distinct()
             return Task(
                 id = "math-cmp-who-$a-$b",
                 category = TaskCategory.MATH,
                 prompt = prompt,
                 inputType = AnswerInputType.CHOICE,
-                choices = options.mapIndexed { i, l -> TaskChoice(i.toString(), l) },
+                choices = TaskChoices.shuffled(listOf(nameA, nameB), random),
                 acceptedAnswers = listOf(winner),
                 hint = entry.hint,
                 hints = Task.buildHints("Сравни два количества", entry.hint),
@@ -183,7 +185,7 @@ class MathTemplateGenerator {
                 category = TaskCategory.MATH,
                 prompt = prompt,
                 inputType = AnswerInputType.CHOICE,
-                choices = listOf(left, right).mapIndexed { i, n -> TaskChoice(i.toString(), n.toString()) },
+                choices = TaskChoices.shuffled(listOf(left.toString(), right.toString()), random),
                 acceptedAnswers = listOf(answer),
                 hint = entry.hint,
                 hints = Task.buildHints("Сравни два числа", entry.hint),
@@ -201,11 +203,7 @@ class MathTemplateGenerator {
             category = TaskCategory.MATH,
             prompt = prompt,
             inputType = AnswerInputType.CHOICE,
-            choices = listOf(
-                TaskChoice("gt", ">"),
-                TaskChoice("lt", "<"),
-                TaskChoice("eq", "=")
-            ),
+            choices = TaskChoices.shuffled(listOf(">", "<", "="), random),
             acceptedAnswers = listOf(op),
             hint = entry.hint,
             hints = Task.buildHints("Выбери знак сравнения", entry.hint),
@@ -226,7 +224,8 @@ class MathTemplateGenerator {
         c: Int,
         price: Int,
         money: Int,
-        level: Int
+        level: Int,
+        random: Random
     ): Task {
         if ("хватит" in lower) {
             val answer = if (money >= price) "да" else "нет"
@@ -235,7 +234,7 @@ class MathTemplateGenerator {
                 category = TaskCategory.MATH,
                 prompt = prompt,
                 inputType = AnswerInputType.CHOICE,
-                choices = listOf(TaskChoice("y", "Да"), TaskChoice("n", "Нет")),
+                choices = TaskChoices.shuffled(listOf("Да", "Нет"), random),
                 acceptedAnswers = listOf(answer),
                 hint = entry.hint,
                 hints = Task.buildHints("Сравни деньги и цену", entry.hint),

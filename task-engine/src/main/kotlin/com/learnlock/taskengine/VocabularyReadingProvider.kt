@@ -78,8 +78,7 @@ class VocabularyReadingProvider(
         val missing = chars[item.missingIndex]
         chars[item.missingIndex] = '_'
         val promptWord = chars.concatToString()
-        val distractors = ('А'..'Я').filter { it != missing }.shuffled(random).take(3)
-        val options = (distractors + missing).map { it.toString() }.shuffled(random)
+        val distractors = ('А'..'Я').filter { it != missing }.shuffled(random).take(3).map { it.toString() }
         return Task(
             id = "read-miss-${item.word}",
             category = category,
@@ -89,7 +88,7 @@ class VocabularyReadingProvider(
                 "Какая буква стоит на месте пропуска: $promptWord?"
             )),
             inputType = AnswerInputType.CHOICE,
-            choices = options.mapIndexed { index, label -> TaskChoice(index.toString(), label) },
+            choices = TaskChoices.withAnswer(missing.toString(), distractors, random),
             acceptedAnswers = listOf(missing.toString()),
             hint = "Это словарное слово — произнеси и вспомни написание",
             hints = Task.buildHints(
@@ -125,14 +124,15 @@ class VocabularyReadingProvider(
         val oddPool = vocab.distinctWords(vLevel, oddCat).filter { it !in baseWords }
         val oddWord = oddPool.randomOrNull(random) ?: return oddOneFallback(level, random)
 
-        val words = (baseWords + oddWord).shuffled(random)
-        if (words.distinct().size != words.size) return oddOneFallback(level, random)
+        val mixed = baseWords + oddWord
+        if (mixed.distinct().size != mixed.size) return oddOneFallback(level, random)
+        val choices = TaskChoices.shuffled(mixed, random)
         return Task(
             id = "read-odd-$baseCat-$oddCat-$oddWord",
             category = category,
-            prompt = "${TextVariator(random).askOdd()}?\n${words.joinToString(", ")}",
+            prompt = "${TextVariator(random).askOdd()}?\n${choices.joinToString(", ") { it.label }}",
             inputType = AnswerInputType.CHOICE,
-            choices = words.mapIndexed { index, label -> TaskChoice(index.toString(), label) },
+            choices = choices,
             acceptedAnswers = listOf(oddWord),
             hint = oddHintByCategory[baseCat] ?: "Три слова из одной категории, одно — нет",
             hints = Task.buildHints(
@@ -154,13 +154,13 @@ class VocabularyReadingProvider(
             Triple(listOf("понедельник", "вторник", "пятница"), "магазин", "Три слова — дни недели")
         )
         val (base, odd, hint) = groups.random(random)
-        val words = (base + odd).shuffled(random)
+        val choices = TaskChoices.shuffled(base + odd, random)
         return Task(
             id = "read-odd-fb-$odd",
             category = category,
-            prompt = "${TextVariator(random).askOdd()}?\n${words.joinToString(", ")}",
+            prompt = "${TextVariator(random).askOdd()}?\n${choices.joinToString(", ") { it.label }}",
             inputType = AnswerInputType.CHOICE,
-            choices = words.mapIndexed { index, label -> TaskChoice(index.toString(), label) },
+            choices = choices,
             acceptedAnswers = listOf(odd),
             hint = hint,
             hints = Task.buildHints("Найди слово не из общей группы", hint),
@@ -177,7 +177,7 @@ class VocabularyReadingProvider(
             category = category,
             prompt = "Выбери синоним к слову «$word»",
             inputType = AnswerInputType.CHOICE,
-            choices = options.mapIndexed { index, label -> TaskChoice(index.toString(), label) },
+            choices = TaskChoices.shuffled(options, random),
             acceptedAnswers = listOf(answer),
             hint = "Синоним — слово с похожим смыслом",
             hints = Task.buildHints(

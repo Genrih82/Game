@@ -49,7 +49,6 @@ class EnglishTaskProvider : TaskProvider {
         } else {
             distractorPool.map { it.en }.distinct().filter { Task.normalize(it) != Task.normalize(answer) }
         }.take(3)
-        val options = ensureStringChoices(answer, wrong, random)
         val soft = "Вспомни знакомое слово"
         val main = if (toRussian) "Выбери русский перевод" else "Выбери английское слово"
         return Task(
@@ -57,7 +56,7 @@ class EnglishTaskProvider : TaskProvider {
             category = category,
             prompt = prompt,
             inputType = AnswerInputType.CHOICE,
-            choices = options.mapIndexed { i, label -> TaskChoice(i.toString(), label) },
+            choices = TaskChoices.withAnswer(answer, wrong, random),
             acceptedAnswers = listOf(answer),
             hint = main,
             hints = Task.buildHints(soft, main),
@@ -84,7 +83,6 @@ class EnglishTaskProvider : TaskProvider {
             .filter { Task.normalize(it) != Task.normalize(answer) }
             .shuffled(random)
             .take(3)
-        val options = ensureStringChoices(answer, wrong, random)
         val soft = "Это неправильный глагол — форма не на -ed"
         val main = "Вспомни: ${verb.base} → ${verb.past}"
         return Task(
@@ -92,7 +90,7 @@ class EnglishTaskProvider : TaskProvider {
             category = category,
             prompt = prompt,
             inputType = AnswerInputType.CHOICE,
-            choices = options.mapIndexed { i, label -> TaskChoice(i.toString(), label) },
+            choices = TaskChoices.withAnswer(answer, wrong, random),
             acceptedAnswers = listOf(answer),
             hint = soft,
             hints = Task.buildHints(soft, "Форма прошедшего времени: ${verb.past}"),
@@ -114,7 +112,6 @@ class EnglishTaskProvider : TaskProvider {
                 else -> "${verb.base} – ${verb.participle} – ${verb.past}"
             }
         }.filter { Task.normalize(it) != Task.normalize(correct) }.distinct().take(3)
-        val options = ensureStringChoices(correct, distractors, random)
         val soft = "Нужны три формы: Infinitive / Past / Past Participle"
         val main = "Правильный ряд: ${verb.base}, ${verb.past}, ${verb.participle}"
         return Task(
@@ -122,25 +119,12 @@ class EnglishTaskProvider : TaskProvider {
             category = category,
             prompt = "Выбери верные три формы глагола «${verb.base}» (${verb.ru})",
             inputType = AnswerInputType.CHOICE,
-            choices = options.mapIndexed { i, label -> TaskChoice(i.toString(), label) },
+            choices = TaskChoices.withAnswer(correct, distractors, random),
             acceptedAnswers = listOf(correct),
             hint = soft,
             hints = Task.buildHints(soft, main),
             difficultyLevel = level,
             skillTag = SkillTag.ENG_THREE_FORMS
         )
-    }
-
-    private fun ensureStringChoices(answer: String, wrong: List<String>, random: Random): List<String> {
-        val fallback = listOf("went", "seen", "made", "took", "came", "said", "got", "had", "did", "was")
-        val pool = wrong
-            .filter { Task.normalize(it) != Task.normalize(answer) }
-            .distinct()
-            .toMutableList()
-        for (f in fallback.shuffled(random)) {
-            if (pool.size >= 3) break
-            if (Task.normalize(f) != Task.normalize(answer) && f !in pool) pool.add(f)
-        }
-        return (pool.take(3) + answer).distinct().shuffled(random)
     }
 }
