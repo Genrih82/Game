@@ -30,9 +30,11 @@ data class ChildProfileEntity(
     val mathEnabled: Boolean = true,
     val readingEnabled: Boolean = true,
     val logicEnabled: Boolean = true,
+    val englishEnabled: Boolean = true,
     val mathWeight: Int = 1,
     val readingWeight: Int = 1,
     val logicWeight: Int = 1,
+    val englishWeight: Int = 1,
     /** После стольких ошибок подряд генератор упрощает задачу. */
     val maxWrongBeforeEasier: Int = 3,
     val hintsEnabled: Boolean = true,
@@ -80,23 +82,28 @@ data class SessionState(
     val nextLaunchAtMillis: Long = 0L,
     val tasksSolved: Int = 0,
     val consecutiveWrong: Int = 0,
-    val lastAccuracyWindow: Double = 0.7
+    val lastAccuracyWindow: Double = 0.7,
+    /** Последняя выданная категория задач для чередования; пусто — ещё не было. */
+    val lastTaskCategory: String = ""
 )
 
 /** Не даёт сохранить профиль, в котором выключены все категории задач. */
 fun ChildProfileEntity.withAtLeastOneCategory(): ChildProfileEntity =
-    if (mathEnabled || readingEnabled || logicEnabled) this else copy(mathEnabled = true)
+    if (mathEnabled || readingEnabled || logicEnabled || englishEnabled) this
+    else copy(mathEnabled = true)
 
 /** Включённые категории задач по флагам профиля. */
 fun ChildProfileEntity.enabledCategories(): Set<TaskCategory> = buildSet {
     if (mathEnabled) add(TaskCategory.MATH)
     if (readingEnabled) add(TaskCategory.READING)
     if (logicEnabled) add(TaskCategory.LOGIC)
+    if (englishEnabled) add(TaskCategory.ENGLISH)
 }
 
 /** Веса категорий для взвешенного выбора провайдера. */
 fun ChildProfileEntity.categoryWeights(): Map<TaskCategory, Int> = mapOf(
     TaskCategory.MATH to mathWeight,
     TaskCategory.READING to readingWeight,
-    TaskCategory.LOGIC to logicWeight
+    TaskCategory.LOGIC to logicWeight,
+    TaskCategory.ENGLISH to englishWeight
 )

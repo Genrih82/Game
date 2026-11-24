@@ -5,55 +5,97 @@ import kotlin.random.Random
 /**
  * Генератор задач [TaskCategory.LOGIC]: числовые последовательности
  * (арифметическая, геометрическая, «фибоначчиевидная», с постоянной второй разностью),
- * узоры из символов и короткие текстовые задачи.
+ * узоры из символов, аналогии и короткие текстовые задачи.
+ *
+ * Антиповтор формулировок выполняет [TaskEngine].
  */
-class ExpandedLogicProvider(
-    private val repeatAvoidance: RepeatAvoidance = RepeatAvoidance()
-) : TaskProvider {
+class ExpandedLogicProvider : TaskProvider {
     override val category: TaskCategory = TaskCategory.LOGIC
 
     private val people = TaskLexicon.logicPeople
     private val items = TaskLexicon.logicItems
 
-    /** Генерирует задачу с до 8 повторов при совпадении с [RepeatAvoidance]. */
     override fun generate(
         profile: DifficultyProfile,
         random: Random,
         preferredSkill: SkillTag?
     ): Task {
-        var task = generateOnce(profile, random, preferredSkill)
-        var attempts = 0
-        while (repeatAvoidance.isRecent(task) && attempts < 16) {
-            task = generateOnce(profile, random, preferredSkill)
-            attempts++
-        }
-        repeatAvoidance.markSeen(task)
-        return task
-    }
-
-    /** Одна попытка генерации с учётом [preferredSkill] или распределения по уровню. */
-    private fun generateOnce(
-        profile: DifficultyProfile,
-        random: Random,
-        preferredSkill: SkillTag?
-    ): Task {
         val level = profile.level()
-        val skill = preferredSkill?.takeIf { it.category == category }
-        return if (skill != null) {
-            when (skill) {
-                SkillTag.LOGIC_SEQ -> sequence(level, random)
-                SkillTag.LOGIC_PATTERN -> pattern(level, random)
-                SkillTag.LOGIC_WORD -> wordProblem(level, random)
-                else -> byLevel(level, random)
-            }
-        } else byLevel(level, random)
+        val skill = AgeCurriculum.clampSkill(profile.ageYears, preferredSkill, category)
+            ?: pickSkill(profile.ageYears, random)
+        return when (skill) {
+            SkillTag.LOGIC_SEQ -> sequence(level, random)
+            SkillTag.LOGIC_PATTERN -> pattern(level, random)
+            SkillTag.LOGIC_WORD -> wordProblem(level, random)
+            SkillTag.LOGIC_ANALOGY -> analogy(level, random)
+            else -> sequence(level, random)
+        }
     }
 
-    /** Случайный тип логического задания по числовому уровню сложности. */
-    private fun byLevel(level: Int, random: Random): Task = when {
-        level <= 3 -> sequence(level, random)
-        level <= 6 -> sequence(level, random)
-        else -> if (random.nextBoolean()) pattern(level, random) else wordProblem(level, random)
+    /** Выбор логического навыка по возрасту (текстовые задачи — с ~2 класса). */
+    private fun pickSkill(ageYears: Int, random: Random): SkillTag {
+        val allowed = AgeCurriculum.allowedSkills(ageYears)
+            .filter { it.category == category }
+        return allowed.random(random)
+    }
+
+    /** Аналогия вида «A → B, как C → ?». */
+    private fun analogy(level: Int, random: Random): Task {
+        val pairs = listOf(
+            Analogy("кот", "котёнок", "собака", "щенок", listOf("щенок", "кот", "мяч", "лес")),
+            Analogy("день", "ночь", "свет", "тьма", listOf("тьма", "утро", "солнце", "книга")),
+            Analogy("учитель", "школа", "врач", "больница", listOf("больница", "урок", "парта", "пенал")),
+            Analogy("птица", "гнездо", "пчела", "улей", listOf("улей", "крыло", "небо", "мёд")),
+            Analogy("рука", "перчатка", "нога", "ботинок", listOf("ботинок", "палец", "шапка", "нос")),
+            Analogy("зима", "снег", "осень", "листва", listOf("листва", "жара", "лыжи", "каток"))
+        )
+        val item = pairs.random(random)
+        val soft = "Найди такую же связь между словами"
+        val main = "«${item.a}» относится к «${item.b}» так же, как «${item.c}» к ответу"
+        return Task(
+            id = "logic-analogy-${item.a}-${item.c}",
+            category = category,
+            prompt = "${item.a} → ${item.b}, как ${item.c} → ?",
+            inputType = AnswerInputType.CHOICE,
+            choices = TaskChoices.shuffled(item.options, random),
+            acceptedAnswers = listOf(item.answer),
+            hint = main,
+            hints = Task.buildHints(soft, main),
+            difficultyLevel = level,
+            skillTag = SkillTag.LOGIC_ANALOGY
+        )
+    }
+
+    private data class Analogy(
+        val a: String,
+        val b: String,
+        val c: String,
+        val answer: String,
+        val options: List<String>
+    )
+
+    /**
+     * Ровно 4 различных числовых варианта, включая верный.
+     * Отрицательные числа допустимы (раньше отсекались и ломали последовательности вниз).
+     */
+    private fun ensureIntChoices(answer: Int, candidates: List<Int>, random: Random): List<Int> {
+        val pool = linkedSetOf<Int>()
+        candidates.filter { it != answer }.forEach { pool.add(it) }
+        var delta = 1
+        while (pool.size < 3) {
+            val up = answer + delta
+            val down = answer - delta
+            if (up != answer) pool.add(up)
+            if (pool.size < 3 && down != answer) pool.add(down)
+            delta++
+            if (delta > 100) break
+        }
+        val distractors = pool.toList().shuffled(random).take(3)
+        val result = (distractors + answer).distinct()
+        check(result.size == 4) {
+            "ожидали 4 варианта, получили ${result.size}: answer=$answer candidates=$candidates"
+        }
+        return result.shuffled(random)
     }
 
     /** Выбирает подтип числовой последовательности. */
@@ -76,24 +118,23 @@ class ExpandedLogicProvider(
         val start = random.nextInt(1, if (level <= 4) 12 else 21)
         val seq = List(4) { start + it * step }
         val answer = start + 4 * step
-        val distractors = buildList {
-            add(answer + step)
-            add(answer - 1)
-            add(answer + 2)
-            add(answer - step)
-            add(answer + if (step > 0) -step * 2 else -step * 2)
-        }.filter { it != answer && it >= 0 }.distinct()
-        val options = (distractors.shuffled(random).take(3) + answer).shuffled(random)
+        val distractors = listOf(
+            answer + step,
+            answer - 1,
+            answer + 2,
+            answer - step,
+            answer + if (step > 0) -step * 2 else step * 2
+        )
+        val options = ensureIntChoices(answer, distractors, random)
         return Task(
             id = "logic-seq-$start-$step",
             category = category,
             prompt = "${TextVariator(random).askNext()}?\n${seq.joinToString(", ")}, ?",
             inputType = AnswerInputType.CHOICE,
-            choices = options.mapIndexed { index, value ->
-                TaskChoice(index.toString(), value.toString())
-            },
+            choices = TaskChoices.exactly(options.map { it.toString() }, random, count = 4),
             acceptedAnswers = listOf(answer.toString()),
             hint = "Найди шаг последовательности: прибавляется или вычитается одно и то же число",
+            hints = Task.buildHints("Подумай, какое правило здесь действует", "Найди шаг последовательности: прибавляется или вычитается одно и то же число"),
             difficultyLevel = level,
             skillTag = SkillTag.LOGIC_SEQ
         )
@@ -105,23 +146,20 @@ class ExpandedLogicProvider(
         val start = random.nextInt(1, if (level <= 4) 6 else 12)
         val seq = List(4) { start * Math.pow(ratio.toDouble(), it.toDouble()).toInt() }
         val answer = seq.last() * ratio
-        val options = listOf(
+        val ensured = ensureIntChoices(
             answer,
-            answer + ratio,
-            answer - ratio,
-            answer * 2 - ratio
-        ).distinct().filter { it > 0 }.shuffled(random).take(4)
-        val ensured = if (answer in options) options else (options.dropLast(1) + answer).shuffled(random)
+            listOf(answer + ratio, answer - ratio, answer * 2 - ratio, answer + 1, answer + ratio * 2),
+            random
+        )
         return Task(
             id = "logic-geo-$start-$ratio",
             category = category,
             prompt = "${TextVariator(random).askNext()}?\n${seq.joinToString(", ")}, ?",
             inputType = AnswerInputType.CHOICE,
-            choices = ensured.mapIndexed { index, value ->
-                TaskChoice(index.toString(), value.toString())
-            },
+            choices = TaskChoices.exactly(ensured.map { it.toString() }, random, count = 4),
             acceptedAnswers = listOf(answer.toString()),
             hint = "Каждое следующее число получается умножением на $ratio",
+            hints = Task.buildHints("Подумай, какое правило здесь действует", "Каждое следующее число получается умножением на $ratio"),
             difficultyLevel = level,
             skillTag = SkillTag.LOGIC_SEQ
         )
@@ -136,19 +174,20 @@ class ExpandedLogicProvider(
         val e = c + d
         val seq = listOf(a, b, c, d)
         val answer = e
-        val options = (listOf(answer + 1, answer - 1, answer + 2, answer + a) + answer)
-            .distinct().filter { it > 0 }.shuffled(random).take(4)
-        val ensured = if (answer in options) options else (options.dropLast(1) + answer).shuffled(random)
+        val ensured = ensureIntChoices(
+            answer,
+            listOf(answer + 1, answer - 1, answer + 2, answer + a),
+            random
+        )
         return Task(
             id = "logic-fib-$a-$b",
             category = category,
             prompt = "${TextVariator(random).askNext()}?\n${seq.joinToString(", ")}, ?",
             inputType = AnswerInputType.CHOICE,
-            choices = ensured.mapIndexed { index, value ->
-                TaskChoice(index.toString(), value.toString())
-            },
+            choices = TaskChoices.exactly(ensured.map { it.toString() }, random, count = 4),
             acceptedAnswers = listOf(answer.toString()),
             hint = "Каждое число — сумма двух предыдущих",
+            hints = Task.buildHints("Подумай, какое правило здесь действует", "Каждое число — сумма двух предыдущих"),
             difficultyLevel = level,
             skillTag = SkillTag.LOGIC_SEQ
         )
@@ -169,19 +208,20 @@ class ExpandedLogicProvider(
         var diff = d1 + 3 * d2 // d1,d1+d2,d1+2d2,d1+3d2
         next += diff
         val answer = next
-        val options = (listOf(answer + d2, answer - d2, answer + 1, answer + d1) + answer)
-            .distinct().filter { it > 0 }.shuffled(random).take(4)
-        val ensured = if (answer in options) options else (options.dropLast(1) + answer).shuffled(random)
+        val ensured = ensureIntChoices(
+            answer,
+            listOf(answer + d2, answer - d2, answer + 1, answer + d1),
+            random
+        )
         return Task(
             id = "logic-seq2-$start-$d1-$d2",
             category = category,
             prompt = "${TextVariator(random).askNext()}?\n${seq.joinToString(", ")}, ?",
             inputType = AnswerInputType.CHOICE,
-            choices = ensured.mapIndexed { index, value ->
-                TaskChoice(index.toString(), value.toString())
-            },
+            choices = TaskChoices.exactly(ensured.map { it.toString() }, random, count = 4),
             acceptedAnswers = listOf(answer.toString()),
             hint = "Разности между соседними числами растут на одно и то же число",
+            hints = Task.buildHints("Подумай, какое правило здесь действует", "Разности между соседними числами растут на одно и то же число"),
             difficultyLevel = level,
             skillTag = SkillTag.LOGIC_SEQ
         )
@@ -203,16 +243,20 @@ class ExpandedLogicProvider(
         val b = shapes.filter { it != a }.random(random)
         val pattern = listOf(a, b, a, b, a)
         val answer = b
-        val options = shapes.shuffled(random).take(4)
-        val ensured = if (answer in options) options else (options.dropLast(1) + answer).shuffled(random)
+        val ensured = TaskChoices.withAnswer(
+            answer,
+            shapes.filter { it != answer },
+            random
+        )
         return Task(
             id = "logic-shape-$a-$b",
             category = category,
             prompt = "${TextVariator(random).askPattern()}?\n${pattern.joinToString(" ")} ?",
             inputType = AnswerInputType.CHOICE,
-            choices = ensured.mapIndexed { index, label -> TaskChoice(index.toString(), label) },
+            choices = ensured,
             acceptedAnswers = listOf(answer),
             hint = "Чередование двух фигур",
+            hints = Task.buildHints("Подумай, какое правило здесь действует", "Чередование двух фигур"),
             difficultyLevel = level,
             skillTag = SkillTag.LOGIC_PATTERN
         )
@@ -227,16 +271,20 @@ class ExpandedLogicProvider(
         val d = picks[3]
         val pattern = listOf(a, b, b, c, c, c)
         val answer = d
-        val options = shapes.shuffled(random).take(4)
-        val ensured = if (answer in options) options else (options.dropLast(1) + answer).shuffled(random)
+        val ensured = TaskChoices.withAnswer(
+            answer,
+            shapes.filter { it != answer },
+            random
+        )
         return Task(
             id = "logic-grow-$a-$b-$c-$d",
             category = category,
             prompt = "${TextVariator(random).askPattern()}?\n${pattern.joinToString(" ")} ?",
             inputType = AnswerInputType.CHOICE,
-            choices = ensured.mapIndexed { index, label -> TaskChoice(index.toString(), label) },
+            choices = ensured,
             acceptedAnswers = listOf(answer),
             hint = "Группы растут: 1, 2, 3 — дальше новая фигура (начало группы из 4)",
+            hints = Task.buildHints("Подумай, какое правило здесь действует", "Группы растут: 1, 2, 3 — дальше новая фигура (начало группы из 4)"),
             difficultyLevel = level,
             skillTag = SkillTag.LOGIC_PATTERN
         )
@@ -248,16 +296,20 @@ class ExpandedLogicProvider(
         val (a, b, c) = trio
         val pattern = listOf(a, b, c, a, b)
         val answer = c
-        val options = shapes.shuffled(random).take(4)
-        val ensured = if (answer in options) options else (options.dropLast(1) + answer).shuffled(random)
+        val ensured = TaskChoices.withAnswer(
+            answer,
+            shapes.filter { it != answer },
+            random
+        )
         return Task(
             id = "logic-tri-$a-$b-$c",
             category = category,
             prompt = "${TextVariator(random).askPattern()}?\n${pattern.joinToString(" ")} ?",
             inputType = AnswerInputType.CHOICE,
-            choices = ensured.mapIndexed { index, label -> TaskChoice(index.toString(), label) },
+            choices = ensured,
             acceptedAnswers = listOf(answer),
             hint = "Паттерн из трёх фигур повторяется",
+            hints = Task.buildHints("Подумай, какое правило здесь действует", "Паттерн из трёх фигур повторяется"),
             difficultyLevel = level,
             skillTag = SkillTag.LOGIC_PATTERN
         )
@@ -289,6 +341,7 @@ class ExpandedLogicProvider(
             inputType = AnswerInputType.NUMBER,
             acceptedAnswers = listOf(b.toString()),
             hint = "Прибавь разницу к числу ${p1.genitive}",
+            hints = Task.buildHints("Подумай, какое правило здесь действует", "Прибавь разницу к числу ${p1.genitive}"),
             difficultyLevel = level,
             skillTag = SkillTag.LOGIC_WORD
         )
@@ -308,6 +361,7 @@ class ExpandedLogicProvider(
             inputType = AnswerInputType.NUMBER,
             acceptedAnswers = listOf((a - gave).toString()),
             hint = "Отними отданное от начального количества",
+            hints = Task.buildHints("Подумай, какое правило здесь действует", "Отними отданное от начального количества"),
             difficultyLevel = level,
             skillTag = SkillTag.LOGIC_WORD
         )
@@ -335,6 +389,7 @@ class ExpandedLogicProvider(
             inputType = AnswerInputType.NUMBER,
             acceptedAnswers = listOf(total.toString()),
             hint = "Сложи шары всех цветов",
+            hints = Task.buildHints("Подумай, какое правило здесь действует", "Сложи шары всех цветов"),
             difficultyLevel = level,
             skillTag = SkillTag.LOGIC_WORD
         )
@@ -351,11 +406,13 @@ class ExpandedLogicProvider(
             category = category,
             prompt = "${p1.nominative} старше ${p2.genitive}, а ${p2.nominative} старше ${p3.genitive}. Кто самый старший?",
             inputType = AnswerInputType.CHOICE,
-            choices = listOf(p1, p2, p3).mapIndexed { index, person ->
-                TaskChoice(index.toString(), person.nominative)
-            },
+            choices = TaskChoices.shuffled(
+                listOf(p1.nominative, p2.nominative, p3.nominative),
+                random
+            ),
             acceptedAnswers = listOf(p1.nominative),
             hint = "Сравни цепочку: кто старше всех?",
+            hints = Task.buildHints("Подумай, какое правило здесь действует", "Сравни цепочку: кто старше всех?"),
             difficultyLevel = level,
             skillTag = SkillTag.LOGIC_WORD
         )
@@ -375,6 +432,7 @@ class ExpandedLogicProvider(
             inputType = AnswerInputType.NUMBER,
             acceptedAnswers = listOf(total.toString()),
             hint = "Сначала прибавь прилетевших, потом вычти улетевших",
+            hints = Task.buildHints("Подумай, какое правило здесь действует", "Сначала прибавь прилетевших, потом вычти улетевших"),
             difficultyLevel = level,
             skillTag = SkillTag.LOGIC_WORD
         )

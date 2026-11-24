@@ -22,6 +22,10 @@ class VocabularyDatabase {
     fun words(level: Level, category: String): List<String> =
         data(level)[category].orEmpty()
 
+    /** Уникальные слова категории (порядок из файла сохраняется по первому вхождению). */
+    fun distinctWords(level: Level, category: String): List<String> =
+        words(level, category).distinct()
+
     /** Множество имён категорий, присутствующих в файле уровня. */
     fun categories(level: Level): Set<String> = data(level).keys
 
@@ -29,13 +33,13 @@ class VocabularyDatabase {
      * Случайное слово из категории или `null`, если список пуст.
      */
     fun randomWord(level: Level, category: String, random: kotlin.random.Random): String? =
-        words(level, category).randomOrNull(random)
+        distinctWords(level, category).randomOrNull(random)
 
     /**
      * До [count] различных слов из категории (перемешивание без повторов в выборке).
      */
     fun pickDistinct(level: Level, category: String, count: Int, random: kotlin.random.Random): List<String> =
-        words(level, category).shuffled(random).take(count)
+        distinctWords(level, category).shuffled(random).take(count)
 
     /** Ленивая загрузка и кэширование карты категория → слова. */
     private fun data(level: Level): Map<String, List<String>> =

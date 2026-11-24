@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -22,6 +23,7 @@ interface LearnLockSession {
     suspend fun setTasksSolved(value: Int)
     suspend fun setConsecutiveWrong(value: Int)
     suspend fun setAccuracy(value: Double)
+    suspend fun setLastTaskCategory(value: String)
     suspend fun clearUnlock()
 }
 
@@ -37,6 +39,7 @@ class SessionStore(private val context: Context) : LearnLockSession {
     private val tasksSolved = intPreferencesKey("tasks_solved")
     private val consecutiveWrong = intPreferencesKey("consecutive_wrong")
     private val accuracy = doublePreferencesKey("accuracy")
+    private val lastTaskCategory = stringPreferencesKey("last_task_category")
 
     /** Поток состояния сессии для UI и проверок блокировки. */
     override val state: Flow<SessionState> = context.sessionDataStore.data.map { prefs ->
@@ -45,7 +48,8 @@ class SessionStore(private val context: Context) : LearnLockSession {
             nextLaunchAtMillis = prefs[nextLaunchAt] ?: 0L,
             tasksSolved = prefs[tasksSolved] ?: 0,
             consecutiveWrong = prefs[consecutiveWrong] ?: 0,
-            lastAccuracyWindow = prefs[accuracy] ?: 0.7
+            lastAccuracyWindow = prefs[accuracy] ?: 0.7,
+            lastTaskCategory = prefs[lastTaskCategory].orEmpty()
         )
     }
 
@@ -70,6 +74,11 @@ class SessionStore(private val context: Context) : LearnLockSession {
     /** Кэширует accuracy для генератора задач. */
     override suspend fun setAccuracy(value: Double) {
         context.sessionDataStore.edit { it[accuracy] = value }
+    }
+
+    /** Запоминает категорию последней выданной задачи для чередования. */
+    override suspend fun setLastTaskCategory(value: String) {
+        context.sessionDataStore.edit { it[lastTaskCategory] = value }
     }
 
     /** Обнуляет только устаревший `unlocked_until`, не срок следующего запуска. */

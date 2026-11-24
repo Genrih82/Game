@@ -170,13 +170,44 @@ fun SettingsScreen(
 
                 Text("Упражнения", style = MaterialTheme.typography.titleLarge)
                 CategoryToggle("Математика", draft.mathEnabled) { enabled ->
-                    draft = draft.copy(mathEnabled = keepCategory(enabled, draft.readingEnabled, draft.logicEnabled))
+                    draft = draft.copy(
+                        mathEnabled = keepCategory(
+                            enabled,
+                            draft.readingEnabled,
+                            draft.logicEnabled,
+                            draft.englishEnabled
+                        )
+                    )
                 }
                 CategoryToggle("Чтение", draft.readingEnabled) { enabled ->
-                    draft = draft.copy(readingEnabled = keepCategory(enabled, draft.mathEnabled, draft.logicEnabled))
+                    draft = draft.copy(
+                        readingEnabled = keepCategory(
+                            enabled,
+                            draft.mathEnabled,
+                            draft.logicEnabled,
+                            draft.englishEnabled
+                        )
+                    )
                 }
                 CategoryToggle("Логика", draft.logicEnabled) { enabled ->
-                    draft = draft.copy(logicEnabled = keepCategory(enabled, draft.mathEnabled, draft.readingEnabled))
+                    draft = draft.copy(
+                        logicEnabled = keepCategory(
+                            enabled,
+                            draft.mathEnabled,
+                            draft.readingEnabled,
+                            draft.englishEnabled
+                        )
+                    )
+                }
+                CategoryToggle("Английский", draft.englishEnabled) { enabled ->
+                    draft = draft.copy(
+                        englishEnabled = keepCategory(
+                            enabled,
+                            draft.mathEnabled,
+                            draft.readingEnabled,
+                            draft.logicEnabled
+                        )
+                    )
                 }
                 CategoryToggle("Подсказки", draft.hintsEnabled) {
                     draft = draft.copy(hintsEnabled = it)
@@ -252,8 +283,8 @@ fun SettingsScreen(
     }
 }
 
-private fun keepCategory(enabled: Boolean, otherA: Boolean, otherB: Boolean): Boolean {
-    if (!enabled && !otherA && !otherB) return true
+private fun keepCategory(enabled: Boolean, vararg others: Boolean): Boolean {
+    if (!enabled && others.none { it }) return true
     return enabled
 }
 

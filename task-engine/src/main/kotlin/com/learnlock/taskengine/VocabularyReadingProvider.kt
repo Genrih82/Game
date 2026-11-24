@@ -6,11 +6,10 @@ import kotlin.random.Random
  * Генератор задач [TaskCategory.READING]:
  * пропущенная буква ([SchoolVocabulary]), «лишнее слово» из [VocabularyDatabase], синонимы.
  *
- * Использует [RepeatAvoidance] для снижения повторяющихся формулировок.
+ * Антиповтор формулировок выполняет [TaskEngine].
  */
 class VocabularyReadingProvider(
-    private val vocab: VocabularyDatabase = VocabularyDatabase(),
-    private val repeatAvoidance: RepeatAvoidance = RepeatAvoidance()
+    private val vocab: VocabularyDatabase = VocabularyDatabase()
 ) : TaskProvider {
     override val category: TaskCategory = TaskCategory.READING
 
@@ -52,39 +51,22 @@ class VocabularyReadingProvider(
         random: Random,
         preferredSkill: SkillTag?
     ): Task {
-        var task = generateOnce(profile, random, preferredSkill)
-        var attempts = 0
-        while (repeatAvoidance.isRecent(task) && attempts < 16) {
-            task = generateOnce(profile, random, preferredSkill)
-            attempts++
-        }
-        repeatAvoidance.markSeen(task)
-        return task
-    }
-
-    /** Одна генерация без ретраев по буферу повторов. */
-    private fun generateOnce(
-        profile: DifficultyProfile,
-        random: Random,
-        preferredSkill: SkillTag?
-    ): Task {
         val level = profile.level()
-        val skill = preferredSkill?.takeIf { it.category == category }
-        return if (skill != null) {
-            when (skill) {
-                SkillTag.READ_LETTER -> missingLetter(profile, level, random)
-                SkillTag.READ_ODD -> oddOne(level, random)
-                SkillTag.READ_SYNONYM -> synonym(level, random)
-                else -> byLevel(profile, level, random)
-            }
-        } else byLevel(profile, level, random)
+        val skill = AgeCurriculum.clampSkill(profile.ageYears, preferredSkill, category)
+            ?: pickSkill(profile.ageYears, random)
+        return when (skill) {
+            SkillTag.READ_LETTER -> missingLetter(profile, level, random)
+            SkillTag.READ_ODD -> oddOne(level, random)
+            SkillTag.READ_SYNONYM -> synonym(level, random)
+            else -> missingLetter(profile, level, random)
+        }
     }
 
-    /** Выбор типа задания по уровню, если навык не зафиксирован. */
-    private fun byLevel(profile: DifficultyProfile, level: Int, random: Random): Task = when {
-        level <= 3 -> missingLetter(profile, level, random)
-        level <= 6 -> oddOne(level, random)
-        else -> synonym(level, random)
+    /** Выбор навыка чтения по возрасту: синонимы — не раньше ориентира 2 класса. */
+    private fun pickSkill(ageYears: Int, random: Random): SkillTag {
+        val allowed = AgeCurriculum.allowedSkills(ageYears)
+            .filter { it.category == category }
+        return allowed.random(random)
     }
 
     /** Задание: угадать пропущенную букву в словарном слове. */
@@ -96,8 +78,7 @@ class VocabularyReadingProvider(
         val missing = chars[item.missingIndex]
         chars[item.missingIndex] = '_'
         val promptWord = chars.concatToString()
-        val distractors = ('А'..'Я').filter { it != missing }.shuffled(random).take(3)
-        val options = (distractors + missing).map { it.toString() }.shuffled(random)
+        val distractors = ('А'..'Я').filter { it != missing }.shuffled(random).take(3).map { it.toString() }
         return Task(
             id = "read-miss-${item.word}",
             category = category,
@@ -107,9 +88,13 @@ class VocabularyReadingProvider(
                 "Какая буква стоит на месте пропуска: $promptWord?"
             )),
             inputType = AnswerInputType.CHOICE,
-            choices = options.mapIndexed { index, label -> TaskChoice(index.toString(), label) },
+            choices = TaskChoices.withAnswer(missing.toString(), distractors, random),
             acceptedAnswers = listOf(missing.toString()),
             hint = "Это словарное слово — произнеси и вспомни написание",
+            hints = Task.buildHints(
+                "Произнеси слово по слогам",
+                "Это словарное слово — произнеси и вспомни написание"
+            ),
             difficultyLevel = level,
             skillTag = SkillTag.READ_LETTER
         )
@@ -128,23 +113,32 @@ class VocabularyReadingProvider(
     private fun oddOne(level: Int, random: Random): Task {
         val vLevel = levelForVocab(level)
         val cats = vocab.categories(vLevel).toList()
-            .filter { vocab.words(vLevel, it).size >= 4 }
+            .filter { vocab.distinctWords(vLevel, it).size >= 4 }
         if (cats.isEmpty()) return oddOneFallback(level, random)
 
         val baseCat = cats.random(random)
-        val oddCat = cats.filter { it != baseCat }.random(random)
+        val oddCat = cats.filter { it != baseCat }.randomOrNull(random)
+            ?: return oddOneFallback(level, random)
         val baseWords = vocab.pickDistinct(vLevel, baseCat, 3, random)
-        val oddWord = vocab.randomWord(vLevel, oddCat, random) ?: return oddOneFallback(level, random)
+        if (baseWords.size < 3) return oddOneFallback(level, random)
+        val oddPool = vocab.distinctWords(vLevel, oddCat).filter { it !in baseWords }
+        val oddWord = oddPool.randomOrNull(random) ?: return oddOneFallback(level, random)
 
-        val words = (baseWords + oddWord).shuffled(random)
+        val mixed = baseWords + oddWord
+        if (mixed.distinct().size != mixed.size) return oddOneFallback(level, random)
+        val choices = TaskChoices.shuffled(mixed, random)
         return Task(
             id = "read-odd-$baseCat-$oddCat-$oddWord",
             category = category,
-            prompt = "${TextVariator(random).askOdd()}?\n${words.joinToString(", ")}",
+            prompt = "${TextVariator(random).askOdd()}?\n${choices.joinToString(", ") { it.label }}",
             inputType = AnswerInputType.CHOICE,
-            choices = words.mapIndexed { index, label -> TaskChoice(index.toString(), label) },
+            choices = choices,
             acceptedAnswers = listOf(oddWord),
             hint = oddHintByCategory[baseCat] ?: "Три слова из одной категории, одно — нет",
+            hints = Task.buildHints(
+                "Найди слово не из общей группы",
+                oddHintByCategory[baseCat] ?: "Три слова из одной категории, одно — нет"
+            ),
             difficultyLevel = level,
             skillTag = SkillTag.READ_ODD
         )
@@ -160,15 +154,16 @@ class VocabularyReadingProvider(
             Triple(listOf("понедельник", "вторник", "пятница"), "магазин", "Три слова — дни недели")
         )
         val (base, odd, hint) = groups.random(random)
-        val words = (base + odd).shuffled(random)
+        val choices = TaskChoices.shuffled(base + odd, random)
         return Task(
             id = "read-odd-fb-$odd",
             category = category,
-            prompt = "${TextVariator(random).askOdd()}?\n${words.joinToString(", ")}",
+            prompt = "${TextVariator(random).askOdd()}?\n${choices.joinToString(", ") { it.label }}",
             inputType = AnswerInputType.CHOICE,
-            choices = words.mapIndexed { index, label -> TaskChoice(index.toString(), label) },
+            choices = choices,
             acceptedAnswers = listOf(odd),
             hint = hint,
+            hints = Task.buildHints("Найди слово не из общей группы", hint),
             difficultyLevel = level,
             skillTag = SkillTag.READ_ODD
         )
@@ -182,9 +177,13 @@ class VocabularyReadingProvider(
             category = category,
             prompt = "Выбери синоним к слову «$word»",
             inputType = AnswerInputType.CHOICE,
-            choices = options.mapIndexed { index, label -> TaskChoice(index.toString(), label) },
+            choices = TaskChoices.shuffled(options, random),
             acceptedAnswers = listOf(answer),
             hint = "Синоним — слово с похожим смыслом",
+            hints = Task.buildHints(
+                "Ищи слово с близким значением, не наоборот",
+                "Синоним — слово с похожим смыслом"
+            ),
             difficultyLevel = level,
             skillTag = SkillTag.READ_SYNONYM
         )

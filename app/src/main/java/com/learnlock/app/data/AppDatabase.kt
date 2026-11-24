@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Локальная Room-БД LearnLock.
  * Хранит профиль ребёнка, родительский PIN и историю попыток.
  *
- * Смена схемы идёт только по миграциям 2→3→4→5→6→7.
+ * Смена схемы идёт только по миграциям 2→3→4→5→6→7→8.
  * Неизвестная версия не пересоздаёт базу: профиль и PIN при этом сохраняются на диске,
  * а открытие завершается ошибкой Room.
  */
@@ -21,7 +21,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ParentAuthEntity::class,
         TaskAttemptEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -107,6 +107,18 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** Добавляет категорию «Английский» в профиль. */
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE child_profile ADD COLUMN englishEnabled INTEGER NOT NULL DEFAULT 1"
+                )
+                database.execSQL(
+                    "ALTER TABLE child_profile ADD COLUMN englishWeight INTEGER NOT NULL DEFAULT 1"
+                )
+            }
+        }
+
         /** Создаёт singleton-подобную БД `learnlock.db` в application context. */
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "learnlock.db")
@@ -115,6 +127,7 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(MIGRATION_4_5)
                 .addMigrations(MIGRATION_5_6)
                 .addMigrations(MIGRATION_6_7)
+                .addMigrations(MIGRATION_7_8)
                 .build()
     }
 }

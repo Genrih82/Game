@@ -146,7 +146,10 @@ class LearnLockRepository(
         val accuracy = statsDao.accuracySince(weekAgo) ?: session.lastAccuracyWindow
         val forceEasier = session.consecutiveWrong >= profile.maxWrongBeforeEasier
         val learnerStats = loadLearnerStats()
-        return taskEngine.nextTask(
+        val lastCategory = session.lastTaskCategory
+            .takeIf { it.isNotBlank() }
+            ?.let { runCatching { TaskCategory.valueOf(it) }.getOrNull() }
+        val task = taskEngine.nextTask(
             TaskRequest(
                 ageYears = profile.ageYears,
                 difficultyOffset = profile.difficultyOffset,
@@ -154,9 +157,12 @@ class LearnLockRepository(
                 categoryWeights = profile.categoryWeights(),
                 recentAccuracy = accuracy,
                 forceEasier = forceEasier,
-                learnerStats = learnerStats
+                learnerStats = learnerStats,
+                lastCategory = lastCategory
             )
         )
+        sessionStore.setLastTaskCategory(task.category.name)
+        return task
     }
 
     /**

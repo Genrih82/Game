@@ -130,22 +130,37 @@ class GenerationInfraTest {
     @Test
     fun mathTemplatesProduceDeterministicAnswers() {
         val provider = ContextualMathProvider()
-        val profile = DifficultyProfile(8, 0, forceEasier = false, recentAccuracy = 0.7)
-        SkillTag.entries.filter { it.category == TaskCategory.MATH }.forEach { skill ->
-            repeat(15) { i ->
-                val task = provider.generate(profile, Random(100 + i * 13 + skill.ordinal), skill)
-                assertEquals(skill, task.skillTag)
-                assertTrue(task.matches(task.acceptedAnswers.first()), task.prompt)
+        // возраст 11 ≈ 4+ класс: все MATH-навыки из AgeCurriculum допустимы
+        val profile = DifficultyProfile(11, 0, forceEasier = false, recentAccuracy = 0.7)
+        SkillTag.entries
+            .filter { it.category == TaskCategory.MATH }
+            .filter { AgeCurriculum.isSkillAllowed(profile.ageYears, it) }
+            .forEach { skill ->
+                repeat(15) { i ->
+                    val task = provider.generate(profile, Random(100 + i * 13 + skill.ordinal), skill)
+                    assertEquals(skill, task.skillTag)
+                    assertTrue(task.matches(task.acceptedAnswers.first()), task.prompt)
+                }
             }
-        }
     }
 
     @Test
     fun engineGeneratesAllCategories() {
         val engine = TaskEngine(random = Random(5))
-        val seen = (1..60).map {
-            engine.nextTask(TaskRequest(ageYears = 9)).category
+        var last: TaskCategory? = null
+        val seen = (1..8).map {
+            val task = engine.nextTask(TaskRequest(ageYears = 9, lastCategory = last))
+            last = task.category
+            task.category
         }.toSet()
-        assertEquals(setOf(TaskCategory.MATH, TaskCategory.READING, TaskCategory.LOGIC), seen)
+        assertEquals(
+            setOf(
+                TaskCategory.MATH,
+                TaskCategory.READING,
+                TaskCategory.LOGIC,
+                TaskCategory.ENGLISH
+            ),
+            seen
+        )
     }
 }
