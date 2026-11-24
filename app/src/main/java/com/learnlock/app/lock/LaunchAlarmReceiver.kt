@@ -18,6 +18,11 @@ class LaunchAlarmReceiver : BroadcastReceiver() {
                 val profile = app.container.repository.getProfileOrDefault()
                 if (!profile.lockEnabled) return@launch
                 LockController.startMonitoring(appContext)
+                // Пока телефон заблокирован, ждём USER_PRESENT вместо запуска задания.
+                if (LockController.isDeviceLocked(appContext)) {
+                    LockController.scheduleNextLaunch(appContext)
+                    return@launch
+                }
                 if (app.container.repository.shouldPresentLock()) {
                     LockController.showLaunchNotification(appContext)
                     LockController.presentLock(appContext)

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.app.AlarmManager
 import android.app.PendingIntent
+import android.app.KeyguardManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import android.os.Build
@@ -95,6 +96,8 @@ object LockController {
     fun onScreenAwake(context: Context) {
         val appContext = context.applicationContext
         val app = appContext as? LearnLockApp ?: return
+        // SCREEN_ON приходит ещё до ввода PIN. В этот момент задачу не запускаем.
+        if (isDeviceLocked(appContext)) return
         scope.launch {
             if (app.container.repository.shouldPresentLock()) {
                 showLaunchNotification(appContext)
@@ -104,6 +107,12 @@ object LockController {
     }
 
     fun onScheduledCheck(context: Context) = onScreenAwake(context)
+
+    /** Возвращает true, пока системный экран блокировки ещё не снят. */
+    fun isDeviceLocked(context: Context): Boolean {
+        val keyguard = context.getSystemService(KeyguardManager::class.java)
+        return keyguard?.isKeyguardLocked == true
+    }
 
     /** Родитель открыл настройки или справку поверх задания. Опрос не должен их закрывать. */
     fun holdForParent() {
