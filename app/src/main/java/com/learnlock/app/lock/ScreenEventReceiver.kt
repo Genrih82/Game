@@ -5,13 +5,13 @@ import android.content.Context
 import android.content.Intent
 
 /**
- * Реагирует на пробуждение экрана и разблокировку устройства.
+ * Реагирует только на фактическую разблокировку устройства.
  * Делегирует решение о показе задачи в [LockController.onScreenAwake].
  */
 class ScreenEventReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
-        if (action == Intent.ACTION_USER_PRESENT || action == Intent.ACTION_SCREEN_ON) {
+        if (action == Intent.ACTION_USER_PRESENT) {
             LockController.onScreenAwake(context)
         }
     }

@@ -2,7 +2,6 @@ package com.learnlock.app.lock
 
 import android.content.Intent
 import android.os.Bundle
-import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
@@ -49,12 +48,8 @@ class LockActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         WindowCompat.getInsetsController(window, window.decorView)
             .show(WindowInsetsCompat.Type.statusBars())
-        window.addFlags(
-            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
-        )
+        // LockActivity не использует showWhenLocked/dismissKeyguard:
+        // системный экран блокировки телефона всегда имеет приоритет.
 
         onBackPressedDispatcher.addCallback(
             this,

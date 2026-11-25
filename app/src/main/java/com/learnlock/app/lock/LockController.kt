@@ -161,16 +161,8 @@ object LockController {
     }
 
     fun showLaunchNotification(context: Context) {
+        // Уведомление остаётся обычным: full-screen запуск мог бы нарушить блокировку телефона.
         if (!launchNotificationShown.compareAndSet(false, true)) return
-        val intent = Intent(context, LockActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        }
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            1003,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
         val notification = NotificationCompat.Builder(context, LearnLockApp.LAUNCH_CHANNEL_ID)
             .setSmallIcon(com.learnlock.app.R.drawable.ic_launcher)
             .setContentTitle("Время задания")
@@ -178,7 +170,6 @@ object LockController {
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setAutoCancel(true)
-            .setFullScreenIntent(pendingIntent, true)
             .build()
         try {
             NotificationManagerCompat.from(context).notify(1003, notification)

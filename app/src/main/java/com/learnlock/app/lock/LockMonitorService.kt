@@ -25,7 +25,7 @@ import java.util.Locale
 /**
  * Foreground-сервис мониторинга.
  * Держит процесс живым и регистрирует [ScreenEventReceiver]
- * на SCREEN_ON / USER_PRESENT (с Android 8 эти интенты нельзя надёжно ловить из манифеста).
+ * только на USER_PRESENT: задание не должно мешать системной блокировке.
  */
 class LockMonitorService : Service() {
     private var screenReceiver: ScreenEventReceiver? = null
@@ -39,7 +39,6 @@ class LockMonitorService : Service() {
         val receiver = ScreenEventReceiver()
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_USER_PRESENT)
-            addAction(Intent.ACTION_SCREEN_ON)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(receiver, filter, RECEIVER_NOT_EXPORTED)
