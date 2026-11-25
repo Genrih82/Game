@@ -30,6 +30,7 @@ data class LockUiState(
     /** Пауза после ошибки, сек. */
     val cooldownSeconds: Int = 0,
     val showParentPin: Boolean = false,
+    val hasParentPin: Boolean = false,
     val unlocked: Boolean = false,
     val tasksSolved: Int = 0,
     val tasksRequired: Int = 1,
@@ -59,9 +60,10 @@ class LockViewModel(
     fun load(unlimited: Boolean = false) {
         viewModelScope.launch {
             val profile = repository.getProfileOrDefault()
+            val hasParentPin = repository.hasParentPin()
             val session = repository.observeSession().first()
             if (!unlimited && repository.isSessionActive()) {
-                uiState = uiState.copy(loading = false, unlocked = true, profile = profile, unlimited = false)
+                uiState = uiState.copy(loading = false, unlocked = true, profile = profile, hasParentPin = hasParentPin, unlimited = false)
                 return@launch
             }
             val task = repository.nextTask()
@@ -70,6 +72,7 @@ class LockViewModel(
                 unlocked = false,
                 unlimited = unlimited,
                 profile = profile,
+                hasParentPin = hasParentPin,
                 tasksSolved = if (unlimited) 0 else session.tasksSolved,
                 tasksRequired = profile.tasksToUnlock.coerceAtLeast(1),
                 sessionCorrect = 0,
@@ -181,7 +184,15 @@ class LockViewModel(
     /** Emergency unlock родительским PIN. Срок уже записан в [LearnLockRepository.unlockWithParentPin]. */
     fun parentUnlock(pin: String) {
         viewModelScope.launch {
-            val ok = repository.unlockWithParentPin(pin)
+            val hasPin = repository.hasParentPin()
+            val ok = if (hasPin) {
+                repository.unlockWithParentPin(pin)
+            } else {
+                // При отсутствии родительского PIN кнопка разблокировки остаётся доступной.
+                // Следующий запуск всё равно планируется по обычному интервалу.
+                repository.scheduleNextLaunch(uiState.profile, resetProgress = true)
+                true
+            }
             if (ok) LockController.scheduleNextLaunch(application)
             uiState = if (ok) {
                 uiState.copy(

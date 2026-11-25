@@ -1,5 +1,7 @@
 package com.learnlock.app.ui.screens
 
+import android.content.res.Configuration
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -40,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -81,6 +84,10 @@ fun LockTaskScreen(
 
     var answer by remember(state.task?.id) { mutableStateOf("") }
     var parentPin by remember { mutableStateOf("") }
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    // В альбомной ориентации уменьшаем отступы, чтобы задание и поле ответа не скрывались клавиатурой.
+    val screenPadding = if (landscape) 10.dp else 20.dp
+    val contentSpacing = if (landscape) 8.dp else 16.dp
 
     LlBackground(energetic = true) {
         if (state.loading) {
@@ -98,9 +105,9 @@ fun LockTaskScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .padding(20.dp)
+                .padding(screenPadding)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(contentSpacing),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Row(
@@ -143,7 +150,7 @@ fun LockTaskScreen(
                     "Решено: ${state.tasksSolved} из ${state.tasksRequired}"
                 },
                 color = LlColors.Mist,
-                style = MaterialTheme.typography.titleMedium,
+                style = if (landscape) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleMedium,
                 textAlign = TextAlign.Center
             )
 
@@ -179,8 +186,8 @@ fun LockTaskScreen(
                             Text(
                                 task.prompt,
                                 style = MaterialTheme.typography.titleMedium.copy(
-                                    fontSize = 17.sp,
-                                    lineHeight = 24.sp
+                                    fontSize = if (landscape) 14.sp else 17.sp,
+                                    lineHeight = if (landscape) 18.sp else 24.sp
                                 ),
                                 color = LlColors.TextPrimary,
                                 textAlign = TextAlign.Center,
@@ -307,11 +314,19 @@ fun LockTaskScreen(
             }
             if (state.profile.lockEnabled) {
                 // PIN нужен только в режиме блокировки телефона.
+                // Если PIN не задан, эта же кнопка разблокирует задание без ввода кода.
                 LlGhostButton(
-                    text = if (state.showParentPin) "Скрыть PIN родителя" else "Родительский PIN",
-                    onClick = { onToggleParentPin(!state.showParentPin) }
+                    text = when {
+                        !state.hasParentPin -> "Разблокировать"
+                        state.showParentPin -> "Скрыть PIN родителя"
+                        else -> "Родительский PIN"
+                    },
+                    onClick = {
+                        if (state.hasParentPin) onToggleParentPin(!state.showParentPin)
+                        else onParentUnlock("")
+                    }
                 )
-                if (state.showParentPin) {
+                if (state.hasParentPin && state.showParentPin) {
                     LlPanel {
                         LlPinField(
                             value = parentPin,

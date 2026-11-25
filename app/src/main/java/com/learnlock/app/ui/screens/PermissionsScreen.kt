@@ -2,7 +2,6 @@ package com.learnlock.app.ui.screens
 
 import android.Manifest
 import android.app.AlarmManager
-import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -39,7 +38,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.learnlock.app.lock.LearnLockAccessibilityService
-import com.learnlock.app.lock.LockController
 import com.learnlock.app.ui.components.LlBackground
 import com.learnlock.app.ui.components.LlGhostButton
 import com.learnlock.app.ui.components.LlPanel
@@ -62,23 +60,19 @@ private data class PermissionStep(
 @Composable
 fun PermissionsScreen(backgroundColor: Int = 0, onBack: () -> Unit, onContinue: (() -> Unit)? = null) {
     val context = LocalContext.current
-    var overlay by remember { mutableStateOf(LockController.canDrawOverlays(context)) }
     var accessibility by remember { mutableStateOf(isAccessibilityEnabled(context)) }
     var batteryIgnored by remember { mutableStateOf(isIgnoringBattery(context)) }
     var exactAlarms by remember { mutableStateOf(canScheduleExactAlarms(context)) }
     var notifications by remember { mutableStateOf(notificationsAllowed(context)) }
-    var fullScreenIntent by remember { mutableStateOf(canUseFullScreenIntent(context)) }
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted -> notifications = granted }
 
     val refresh: () -> Unit = {
-        overlay = LockController.canDrawOverlays(context)
         accessibility = isAccessibilityEnabled(context)
         batteryIgnored = isIgnoringBattery(context)
         exactAlarms = canScheduleExactAlarms(context)
         notifications = notificationsAllowed(context)
-        fullScreenIntent = canUseFullScreenIntent(context)
     }
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -90,23 +84,8 @@ fun PermissionsScreen(backgroundColor: Int = 0, onBack: () -> Unit, onContinue: 
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val steps = remember(overlay, accessibility, batteryIgnored, exactAlarms, notifications, fullScreenIntent) {
+    val steps = remember(accessibility, batteryIgnored, exactAlarms, notifications) {
         listOf(
-            PermissionStep(
-                title = "Поверх других окон",
-                body = "Чтобы задание появлялось поверх игр и браузера.",
-                actionLabel = "Открыть настройку поверх окон",
-                applicable = true,
-                isGranted = { overlay },
-                open = { ctx ->
-                    ctx.startActivity(
-                        Intent(
-                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                            Uri.parse("package:${ctx.packageName}")
-                        )
-                    )
-                }
-            ),
             PermissionStep(
                 title = "Специальные возможности",
                 body = "Чтобы вернуть задание, если ребёнок ушёл в другое приложение.",
@@ -155,22 +134,6 @@ fun PermissionsScreen(backgroundColor: Int = 0, onBack: () -> Unit, onContinue: 
                 isGranted = { notifications },
                 open = { /* handled via launcher below */ }
             ),
-            PermissionStep(
-                title = "Полноэкранный запуск",
-                body = "Чтобы задание могло открыться поверх экрана блокировки.",
-                actionLabel = "Разрешить полноэкранный запуск",
-                applicable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE,
-                isGranted = { fullScreenIntent },
-                open = { ctx ->
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        ctx.startActivity(
-                            Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
-                                data = Uri.parse("package:${ctx.packageName}")
-                            }
-                        )
-                    }
-                }
-            )
         ).filter { it.applicable }
     }
 
@@ -308,29 +271,20 @@ private fun notificationsAllowed(context: Context): Boolean {
     return granted && NotificationManagerCompat.from(context).areNotificationsEnabled()
 }
 
-private fun canUseFullScreenIntent(context: Context): Boolean {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return true
-    return context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
-}
-
 /** Все разрешения, необходимые для автоматического запуска заданий. */
 fun allRequiredPermissionsGranted(context: Context): Boolean =
-    LockController.canDrawOverlays(context) &&
-        isAccessibilityEnabled(context) &&
+    // Уведомления остаются необязательными: они только показывают напоминание.
+    isAccessibilityEnabled(context) &&
         isIgnoringBattery(context) &&
-        canScheduleExactAlarms(context) &&
-        notificationsAllowed(context) &&
-        canUseFullScreenIntent(context)
+        canScheduleExactAlarms(context)
 
 /** Индекс первого шага, который ещё не выполнен. */
 private fun firstMissingPermissionIndex(context: Context): Int {
     val granted = listOf(
-        LockController.canDrawOverlays(context),
         isAccessibilityEnabled(context),
         isIgnoringBattery(context),
         canScheduleExactAlarms(context),
-        notificationsAllowed(context),
-        canUseFullScreenIntent(context)
+        notificationsAllowed(context)
     )
     return granted.indexOfFirst { !it }.takeIf { it >= 0 } ?: 0
 }
